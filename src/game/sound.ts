@@ -45,14 +45,23 @@ export class SoundEngine {
   private ambientOsc: OscillatorNode | null = null;
   private ambientGain: GainNode | null = null;
   public isMuted: boolean = false;
+  public volume: number = 0.7; // 0.0 to 1.0
 
   // High-Fidelity BGM Manager
   public currentTrack: BgmTrackInfo | null = null;
   public onTrackChange?: (track: BgmTrackInfo) => void;
+  public onVolumeChange?: (volume: number) => void;
   private fadeInterval: number | null = null;
 
   constructor() {
     this.isMuted = localStorage.getItem("cp_muted") === "true";
+    const savedVol = localStorage.getItem("cp_volume");
+    if (savedVol !== null) {
+      const parsed = parseFloat(savedVol);
+      if (!isNaN(parsed)) {
+        this.volume = Math.max(0, Math.min(1, parsed));
+      }
+    }
   }
 
   private initCtx() {
@@ -65,9 +74,24 @@ export class SoundEngine {
     }
   }
 
+  public setVolume(val: number) {
+    this.volume = Math.max(0, Math.min(1, val));
+    localStorage.setItem("cp_volume", this.volume.toString());
+
+    if (this.bgmAudio && !this.isMuted) {
+      this.bgmAudio.volume = 0.45 * this.volume;
+    }
+    if (this.ambientGain && this.ctx && !this.isMuted) {
+      this.ambientGain.gain.setValueAtTime(0.04 * this.volume, this.ctx.currentTime);
+    }
+    if (this.onVolumeChange) {
+      this.onVolumeChange(this.volume);
+    }
+  }
+
   // Laser shoot (Koji railgun / Kai blade)
   playLaser(freq: number = 600) {
-    if (this.isMuted) return;
+    if (this.isMuted || this.volume <= 0) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -79,7 +103,7 @@ export class SoundEngine {
     osc.frequency.setValueAtTime(freq, now);
     osc.frequency.exponentialRampToValueAtTime(120, now + 0.12);
 
-    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.setValueAtTime(0.12 * this.volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
 
     osc.connect(gain);
@@ -90,7 +114,7 @@ export class SoundEngine {
 
   // Yuzu bomb / Enemy explosion
   playExplosion(isBig: boolean = false) {
-    if (this.isMuted) return;
+    if (this.isMuted || this.volume <= 0) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -102,7 +126,7 @@ export class SoundEngine {
     osc.frequency.setValueAtTime(isBig ? 120 : 180, now);
     osc.frequency.exponentialRampToValueAtTime(25, now + (isBig ? 0.35 : 0.2));
 
-    gain.gain.setValueAtTime(isBig ? 0.25 : 0.16, now);
+    gain.gain.setValueAtTime((isBig ? 0.25 : 0.16) * this.volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + (isBig ? 0.35 : 0.2));
 
     osc.connect(gain);
@@ -113,7 +137,7 @@ export class SoundEngine {
 
   // XP gem pickup chime
   playXpChime() {
-    if (this.isMuted) return;
+    if (this.isMuted || this.volume <= 0) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -126,7 +150,7 @@ export class SoundEngine {
     const freq = notes[Math.floor(Math.random() * notes.length)];
     osc.frequency.setValueAtTime(freq, now);
 
-    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.setValueAtTime(0.08 * this.volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
 
     osc.connect(gain);
@@ -137,7 +161,7 @@ export class SoundEngine {
 
   // Level Up Fanfare
   playLevelUp() {
-    if (this.isMuted) return;
+    if (this.isMuted || this.volume <= 0) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -150,7 +174,7 @@ export class SoundEngine {
       osc.type = "triangle";
       osc.frequency.setValueAtTime(freq, now);
 
-      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.setValueAtTime(0.15 * this.volume, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
 
       osc.connect(gain);
@@ -162,7 +186,7 @@ export class SoundEngine {
 
   // Player hurt / hit
   playHurt() {
-    if (this.isMuted) return;
+    if (this.isMuted || this.volume <= 0) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -174,7 +198,7 @@ export class SoundEngine {
     osc.frequency.setValueAtTime(140, now);
     osc.frequency.linearRampToValueAtTime(60, now + 0.1);
 
-    gain.gain.setValueAtTime(0.18, now);
+    gain.gain.setValueAtTime(0.18 * this.volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
     osc.connect(gain);
@@ -185,7 +209,7 @@ export class SoundEngine {
 
   // Ambient procedural synth drone (plays if no custom BGM MP3 is found)
   startAmbientDrone() {
-    if (this.isMuted || this.ambientOsc) return;
+    if (this.isMuted || this.volume <= 0 || this.ambientOsc) return;
     this.initCtx();
     if (!this.ctx) return;
 
@@ -195,7 +219,7 @@ export class SoundEngine {
 
       this.ambientOsc.type = "sine";
       this.ambientOsc.frequency.setValueAtTime(75, this.ctx.currentTime);
-      this.ambientGain.gain.setValueAtTime(0.04, this.ctx.currentTime);
+      this.ambientGain.gain.setValueAtTime(0.04 * this.volume, this.ctx.currentTime);
 
       this.ambientOsc.connect(this.ambientGain);
       this.ambientGain.connect(this.ctx.destination);
@@ -228,13 +252,15 @@ export class SoundEngine {
       this.onTrackChange(track);
     }
 
-    if (this.isMuted) return;
+    if (this.isMuted || this.volume <= 0) return;
     this.stopAmbientDrone();
+
+    const targetVol = 0.45 * this.volume;
 
     if (!this.bgmAudio) {
       this.bgmAudio = new Audio();
       this.bgmAudio.loop = true;
-      this.bgmAudio.volume = 0.45;
+      this.bgmAudio.volume = targetVol;
     }
 
     // Smooth quick volume crossfade
@@ -260,7 +286,7 @@ export class SoundEngine {
   private loadAndStartTrack(src: string) {
     if (!this.bgmAudio) return;
     this.bgmAudio.src = src;
-    this.bgmAudio.volume = 0.45;
+    this.bgmAudio.volume = 0.45 * this.volume;
     this.bgmAudio.play().catch(() => {
       // Fallback to procedural synth drone if audio file fails or browser blocks autoplay
       this.startAmbientDrone();
@@ -286,6 +312,9 @@ export class SoundEngine {
       this.stopAmbientDrone();
       if (this.bgmAudio) this.bgmAudio.pause();
     } else {
+      if (this.bgmAudio) {
+        this.bgmAudio.volume = 0.45 * this.volume;
+      }
       if (this.currentTrack) {
         this.playTrack(this.currentTrack.id);
       } else {

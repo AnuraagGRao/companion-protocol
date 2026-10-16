@@ -14,6 +14,7 @@ export default function App() {
   const [selectedCompanion, setSelectedCompanion] = useState<CompanionId>("koji");
   const [pendingUpgrades, setPendingUpgrades] = useState<UpgradeCard[] | null>(null);
   const [isMuted, setIsMuted] = useState(sounds.isMuted);
+  const [volume, setVolumeState] = useState(sounds.volume);
   const [currentBgm, setCurrentBgm] = useState<BgmTrackInfo | null>(sounds.currentTrack);
   const [isHoveringAbandon, setIsHoveringAbandon] = useState(false);
 
@@ -134,6 +135,15 @@ export default function App() {
     setIsMuted(muted);
   };
 
+  const handleVolumeChange = (newVol: number) => {
+    setVolumeState(newVol);
+    sounds.setVolume(newVol);
+    if (isMuted && newVol > 0) {
+      sounds.toggleMute();
+      setIsMuted(false);
+    }
+  };
+
   const currentCompData = COMPANIONS[selectedCompanion];
   const currentOpData = HUMAN_OPERATORS[selectedOperator];
 
@@ -158,9 +168,9 @@ export default function App() {
         className={`w-full h-full ${gameState === "playing" ? "block" : "hidden"}`}
       />
 
-      {/* ── Persistent Soundtrack Indicator & Menu Mute ──────────────────────── */}
+      {/* ── Persistent Soundtrack Indicator & Menu Volume Controls ─────────── */}
       <div className="absolute top-4 right-4 z-40 flex items-center gap-2 pointer-events-auto">
-        {currentBgm && !isMuted && (
+        {currentBgm && !isMuted && volume > 0 && (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/90 border border-cyan-500/30 rounded-full text-xs font-mono text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.2)] backdrop-blur">
             <div className="flex items-end gap-0.5 h-3">
               <span className="w-0.5 bg-cyan-400 rounded-full animate-pulse h-full" />
@@ -172,13 +182,28 @@ export default function App() {
           </div>
         )}
         {gameState !== "playing" && (
-          <button
-            onClick={toggleSound}
-            className="glass-panel p-2.5 text-slate-300 hover:text-white transition-all rounded-xl cursor-pointer"
-            title={isMuted ? "Unmute Audio" : "Mute Audio"}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
-          </button>
+          <div className="glass-panel px-3 py-1.5 flex items-center gap-2">
+            <button
+              onClick={toggleSound}
+              className="text-slate-300 hover:text-white transition-all cursor-pointer flex items-center justify-center"
+              title={isMuted ? "Unmute Audio" : "Mute Audio"}
+            >
+              {isMuted || volume === 0 ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={isMuted ? 0 : volume}
+              onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+              className="volume-slider w-16 sm:w-20"
+              title={`Master Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+            />
+            <span className="text-[10px] font-mono text-cyan-300 w-7 text-right">
+              {isMuted ? "0%" : `${Math.round(volume * 100)}%`}
+            </span>
+          </div>
         )}
       </div>
 
@@ -384,13 +409,28 @@ export default function App() {
                 <span>{score.toLocaleString()}</span>
               </div>
 
-              <button
-                onClick={toggleSound}
-                className="glass-panel p-2.5 text-slate-300 hover:text-white transition-all cursor-pointer"
-                title="Mute / Unmute"
-              >
-                {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-              </button>
+              <div className="glass-panel px-3 py-1.5 flex items-center gap-2">
+                <button
+                  onClick={toggleSound}
+                  className="text-slate-300 hover:text-white transition-all cursor-pointer flex items-center justify-center"
+                  title="Mute / Unmute"
+                >
+                  {isMuted || volume === 0 ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={isMuted ? 0 : volume}
+                  onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                  className="volume-slider w-16 sm:w-20"
+                  title={`Master Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+                />
+                <span className="text-[10px] font-mono text-cyan-300 w-7 text-right">
+                  {isMuted ? "0%" : `${Math.round(volume * 100)}%`}
+                </span>
+              </div>
             </div>
           </div>
 
