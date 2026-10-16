@@ -116,6 +116,21 @@ export class GameEngine {
       this.mousePos.y = e.clientY;
     });
 
+    // Touch event aiming for mobile devices
+    this.canvas.addEventListener("touchstart", (e) => {
+      if (e.touches.length > 0) {
+        this.mousePos.x = e.touches[0].clientX;
+        this.mousePos.y = e.touches[0].clientY;
+      }
+    }, { passive: true });
+
+    this.canvas.addEventListener("touchmove", (e) => {
+      if (e.touches.length > 0) {
+        this.mousePos.x = e.touches[0].clientX;
+        this.mousePos.y = e.touches[0].clientY;
+      }
+    }, { passive: true });
+
     window.addEventListener("resize", () => this.resize());
   }
 
@@ -258,10 +273,14 @@ export class GameEngine {
     this.player.x += this.player.vx;
     this.player.y += this.player.vy;
 
-    // Player facing angle towards mouse or movement
-    const worldMouseX = this.mousePos.x - this.canvas.width / 2 + this.cameraX;
-    const worldMouseY = this.mousePos.y - this.canvas.height / 2 + this.cameraY;
-    this.player.facingAngle = Math.atan2(worldMouseY - this.player.y, worldMouseX - this.player.x);
+    // Player facing angle towards joystick movement, touch aim, or mouse cursor
+    if (this.joystickVector.x !== 0 || this.joystickVector.y !== 0) {
+      this.player.facingAngle = Math.atan2(this.joystickVector.y, this.joystickVector.x);
+    } else if (this.mousePos.x !== 0 || this.mousePos.y !== 0) {
+      const worldMouseX = this.mousePos.x - this.canvas.width / 2 + this.cameraX;
+      const worldMouseY = this.mousePos.y - this.canvas.height / 2 + this.cameraY;
+      this.player.facingAngle = Math.atan2(worldMouseY - this.player.y, worldMouseX - this.player.x);
+    }
 
     // Immortal Guardian Companion orbits & protects the Human Operator
     this.player.companionAngle += delta * 2.2;

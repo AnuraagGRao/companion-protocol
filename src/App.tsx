@@ -35,6 +35,55 @@ export default function App() {
   const sadCanvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
 
+  // Mobile Virtual Joystick State & Pointer Handlers
+  const joystickBaseRef = useRef<HTMLDivElement>(null);
+  const [knobOffset, setKnobOffset] = useState({ x: 0, y: 0 });
+  const isDraggingJoystickRef = useRef(false);
+
+  const updateJoystickPosition = (clientX: number, clientY: number) => {
+    if (!joystickBaseRef.current) return;
+    const rect = joystickBaseRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const dx = clientX - centerX;
+    const dy = clientY - centerY;
+    const dist = Math.hypot(dx, dy);
+    const maxRadius = 38;
+
+    const clampedDist = Math.min(dist, maxRadius);
+    const normX = dist > 0 ? (dx / dist) * (clampedDist / maxRadius) : 0;
+    const normY = dist > 0 ? (dy / dist) * (clampedDist / maxRadius) : 0;
+
+    const knobX = dist > 0 ? (dx / dist) * clampedDist : 0;
+    const knobY = dist > 0 ? (dy / dist) * clampedDist : 0;
+
+    setKnobOffset({ x: knobX, y: knobY });
+    if (engineRef.current) {
+      engineRef.current.joystickVector = { x: normX, y: normY };
+    }
+  };
+
+  const handleJoystickStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    isDraggingJoystickRef.current = true;
+    updateJoystickPosition(e.clientX, e.clientY);
+  };
+
+  const handleJoystickMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingJoystickRef.current) return;
+    e.preventDefault();
+    updateJoystickPosition(e.clientX, e.clientY);
+  };
+
+  const handleJoystickEnd = () => {
+    isDraggingJoystickRef.current = false;
+    setKnobOffset({ x: 0, y: 0 });
+    if (engineRef.current) {
+      engineRef.current.joystickVector = { x: 0, y: 0 };
+    }
+  };
+
   // Load High Score & Initialize Soundtrack Listeners
   useEffect(() => {
     const saved = localStorage.getItem("cp_highscore");
@@ -165,7 +214,7 @@ export default function App() {
       {/* ── Game Canvas ──────────────────────────────────────────────────────── */}
       <canvas
         ref={canvasRef}
-        className={`w-full h-full ${gameState === "playing" ? "block" : "hidden"}`}
+        className={`w-full h-full touch-none ${gameState === "playing" ? "block" : "hidden"}`}
       />
 
       {/* ── Persistent Soundtrack Indicator & Menu Volume Controls ─────────── */}
@@ -344,34 +393,34 @@ export default function App() {
 
       {/* ── Active Game HUD ─────────────────────────────────────────────────── */}
       {gameState === "playing" && (
-        <div className="absolute inset-0 z-20 pointer-events-none p-4 sm:p-6 flex flex-col justify-between">
-          {/* Top Status Bar */}
-          <div className="flex items-start justify-between w-full">
+        <div className="absolute inset-0 z-20 pointer-events-none p-2 sm:p-6 flex flex-col justify-between">
+          {/* Top Status Bar (Responsive on Mobile) */}
+          <div className="flex flex-wrap items-center justify-between gap-2 w-full">
             {/* Operator HP & XP Gauge */}
-            <div className="flex flex-col gap-2 max-w-xs w-full pointer-events-auto">
-              <div className="glass-panel p-3 flex flex-col gap-1.5">
-                <div className="flex justify-between items-center text-xs font-mono">
-                  <span className="font-bold text-white flex items-center gap-1.5">
+            <div className="flex flex-col gap-1 max-w-[145px] sm:max-w-xs w-full pointer-events-auto">
+              <div className="glass-panel p-2 sm:p-3 flex flex-col gap-1">
+                <div className="flex justify-between items-center text-[10px] sm:text-xs font-mono">
+                  <span className="font-bold text-white flex items-center gap-1 truncate">
                     <span>{currentOpData.emoji}</span>
-                    <span>{currentOpData.name} ({currentCompData.emoji} {currentCompData.name})</span>
+                    <span className="truncate">{currentOpData.name}</span>
                   </span>
-                  <span className="text-slate-400">LVL {level}</span>
+                  <span className="text-slate-400 font-bold ml-1">L{level}</span>
                 </div>
 
                 {/* HP Bar */}
-                <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-white/10">
+                <div className="w-full h-2 sm:h-2.5 bg-slate-900 rounded-full overflow-hidden border border-white/10">
                   <div
                     className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-150"
                     style={{ width: `${Math.max(0, (playerHp / playerMaxHp) * 100)}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-[10px] font-mono text-slate-400">
-                  <span>OPERATOR HP</span>
-                  <span>{Math.round(playerHp)} / {playerMaxHp}</span>
+                <div className="flex justify-between text-[9px] sm:text-[10px] font-mono text-slate-400">
+                  <span>HP</span>
+                  <span>{Math.round(playerHp)}/{playerMaxHp}</span>
                 </div>
 
                 {/* XP Bar */}
-                <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-white/5">
+                <div className="w-full h-1 sm:h-1.5 bg-slate-900 rounded-full overflow-hidden border border-white/5">
                   <div
                     className="h-full bg-cyan-400 transition-all duration-150"
                     style={{ width: `${Math.min(100, (playerXp / nextXp) * 100)}%` }}
@@ -381,41 +430,42 @@ export default function App() {
             </div>
 
             {/* Sanctuary Base Health Indicator */}
-            <div className="glass-panel px-5 py-2.5 flex flex-col items-center pointer-events-auto">
-              <div className="flex items-center gap-2 text-xs font-mono font-bold text-cyan-400">
-                <Shield className="w-4 h-4" />
-                <span>SANCTUARY BASE CORE</span>
+            <div className="glass-panel px-3 py-1.5 sm:px-5 sm:py-2.5 flex flex-col items-center pointer-events-auto">
+              <div className="flex items-center gap-1.5 text-[10px] sm:text-xs font-mono font-bold text-cyan-400">
+                <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">SANCTUARY BASE CORE</span>
+                <span className="sm:hidden">BASE CORE</span>
               </div>
-              <div className="w-44 h-2 bg-slate-900 rounded-full overflow-hidden mt-1.5 border border-white/10">
+              <div className="w-24 sm:w-44 h-1.5 sm:h-2 bg-slate-900 rounded-full overflow-hidden mt-1 border border-white/10">
                 <div
                   className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-200"
                   style={{ width: `${Math.max(0, (baseHp / 1000) * 100)}%` }}
                 />
               </div>
-              <span className="text-[10px] font-mono text-slate-400 mt-1">
-                {Math.round(baseHp)} / 1000 HP
+              <span className="text-[9px] sm:text-[10px] font-mono text-slate-400 mt-0.5">
+                {Math.round(baseHp)}/1000 HP
               </span>
             </div>
 
             {/* Wave & Score Pills */}
-            <div className="flex items-center gap-3 pointer-events-auto">
-              <div className="glass-panel px-4 py-2 flex items-center gap-2 text-xs font-mono text-white font-bold">
-                <Flame className="w-4 h-4 text-orange-400" />
-                <span>WAVE {wave}</span>
+            <div className="flex items-center gap-1.5 sm:gap-3 pointer-events-auto">
+              <div className="glass-panel px-2.5 py-1 sm:px-4 sm:py-2 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-mono text-white font-bold">
+                <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-400" />
+                <span>W{wave}</span>
               </div>
 
-              <div className="glass-panel px-4 py-2 flex items-center gap-2 text-xs font-mono text-white font-bold">
-                <Trophy className="w-4 h-4 text-amber-400" />
+              <div className="glass-panel px-2.5 py-1 sm:px-4 sm:py-2 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-mono text-white font-bold">
+                <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
                 <span>{score.toLocaleString()}</span>
               </div>
 
-              <div className="glass-panel px-3 py-1.5 flex items-center gap-2">
+              <div className="glass-panel px-2 py-1 sm:px-3 sm:py-1.5 flex items-center gap-1.5">
                 <button
                   onClick={toggleSound}
                   className="text-slate-300 hover:text-white transition-all cursor-pointer flex items-center justify-center"
                   title="Mute / Unmute"
                 >
-                  {isMuted || volume === 0 ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
+                  {isMuted || volume === 0 ? <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />}
                 </button>
                 <input
                   type="range"
@@ -424,23 +474,64 @@ export default function App() {
                   step="0.05"
                   value={isMuted ? 0 : volume}
                   onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                  className="volume-slider w-16 sm:w-20"
+                  className="volume-slider w-12 sm:w-20 hidden xs:inline"
                   title={`Master Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
                 />
-                <span className="text-[10px] font-mono text-cyan-300 w-7 text-right">
-                  {isMuted ? "0%" : `${Math.round(volume * 100)}%`}
-                </span>
               </div>
             </div>
           </div>
 
-          {/* Bottom Controls / Special Ability Trigger */}
-          <div className="flex items-end justify-between w-full">
-            <div className="hidden sm:block text-[11px] font-mono text-slate-400 glass-pill px-3 py-1">
+          {/* ── Virtual Joystick for Mobile Screens ──────────────────────────── */}
+          <div
+            ref={joystickBaseRef}
+            onPointerDown={handleJoystickStart}
+            onPointerMove={handleJoystickMove}
+            onPointerUp={handleJoystickEnd}
+            onPointerCancel={handleJoystickEnd}
+            className="fixed bottom-6 left-6 z-30 pointer-events-auto touch-none select-none w-28 h-28 rounded-full border border-cyan-500/40 bg-slate-950/70 backdrop-blur-md flex items-center justify-center shadow-[0_0_25px_rgba(6,182,212,0.25)] md:hidden active:border-cyan-400"
+          >
+            {/* Cardinal hints */}
+            <span className="absolute top-1 text-[9px] text-cyan-500/50 font-mono">▲</span>
+            <span className="absolute bottom-1 text-[9px] text-cyan-500/50 font-mono">▼</span>
+            <span className="absolute left-1.5 text-[9px] text-cyan-500/50 font-mono">◀</span>
+            <span className="absolute right-1.5 text-[9px] text-cyan-500/50 font-mono">▶</span>
+
+            {/* Thumbstick Knob */}
+            <div
+              className="w-12 h-12 rounded-full bg-gradient-to-tr from-cyan-500 to-sky-400 shadow-[0_0_15px_rgba(6,182,212,0.6)] border border-white/50 flex items-center justify-center pointer-events-none transition-transform duration-75"
+              style={{
+                transform: `translate(${knobOffset.x}px, ${knobOffset.y}px)`,
+              }}
+            >
+              <div className="w-4 h-4 rounded-full bg-white/40" />
+            </div>
+          </div>
+
+          {/* ── Mobile Ability Button ────────────────────────────────────────── */}
+          <div className="fixed bottom-6 right-6 z-30 pointer-events-auto md:hidden">
+            <button
+              onClick={() => engineRef.current?.triggerAbility()}
+              disabled={abilityCooldown > 0}
+              className={`w-20 h-20 rounded-full flex flex-col items-center justify-center p-2 border transition-all shadow-xl active:scale-95 cursor-pointer ${
+                abilityCooldown <= 0
+                  ? "bg-cyan-950/80 border-cyan-400 text-white shadow-[0_0_25px_rgba(6,182,212,0.5)] animate-pulse"
+                  : "bg-slate-900/80 border-slate-700 text-slate-500 opacity-60"
+              }`}
+            >
+              <Zap className={`w-6 h-6 ${abilityCooldown <= 0 ? "text-cyan-400" : "text-slate-500"}`} />
+              <span className="text-[10px] font-mono font-bold mt-0.5 uppercase tracking-tighter">
+                {abilityCooldown > 0 ? `${abilityCooldown.toFixed(1)}s` : "SPECIAL"}
+              </span>
+            </button>
+          </div>
+
+          {/* ── Desktop Bottom Controls & Info ──────────────────────────────── */}
+          <div className="hidden md:flex items-end justify-between w-full">
+            <div className="text-[11px] font-mono text-slate-400 glass-pill px-3 py-1">
               💡 Stand in Sanctuary Base to regenerate HP · WASD/Arrows to Move · Companion Auto-Fires
             </div>
 
-            {/* Ability Button */}
+            {/* Desktop Ability Button */}
             <button
               onClick={() => engineRef.current?.triggerAbility()}
               disabled={abilityCooldown > 0}
