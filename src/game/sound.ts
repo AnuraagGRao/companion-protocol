@@ -4,7 +4,7 @@
  */
 
 export interface BgmTrackInfo {
-  id: "menu" | "combat" | "boss" | "orbit";
+  id: "menu" | "combat" | "boss";
   title: string;
   artist: string;
   bpm: number;
@@ -19,7 +19,7 @@ export const SOUNDTRACK: Record<string, BgmTrackInfo> = {
     artist: "Anuraag Rao",
     bpm: 86,
     genre: "Neo-Tokyo Lofi",
-    src: "/audio/Midnight_at_the_Bamboo_Gate.mp3"
+    src: "/audio/menu.mp3"
   },
   combat: {
     id: "combat",
@@ -27,7 +27,7 @@ export const SOUNDTRACK: Record<string, BgmTrackInfo> = {
     artist: "Anuraag Rao",
     bpm: 130,
     genre: "Synthwave Electro",
-    src: "/audio/Turbo_Arcade_Runner.mp3"
+    src: "/audio/combat.mp3"
   },
   boss: {
     id: "boss",
@@ -35,15 +35,7 @@ export const SOUNDTRACK: Record<string, BgmTrackInfo> = {
     artist: "Anuraag Rao",
     bpm: 144,
     genre: "Darksynth Breakbeat",
-    src: "/audio/Hardline_Extraction.mp3"
-  },
-  orbit: {
-    id: "orbit",
-    title: "Orbiting the Pale Star",
-    artist: "Anuraag Rao",
-    bpm: 60,
-    genre: "Deep Space Ambient",
-    src: "/audio/Orbiting_the_Pale_Star.mp3"
+    src: "/audio/boss.mp3"
   }
 };
 
@@ -224,7 +216,7 @@ export class SoundEngine {
   }
 
   // ── High-Fidelity BGM Manager ───────────────────────────────────────────
-  playTrack(key: "menu" | "combat" | "boss" | "orbit") {
+  playTrack(key: "menu" | "combat" | "boss") {
     const track = SOUNDTRACK[key];
     if (!track) return;
     if (this.currentTrack?.id === key && this.bgmAudio && !this.bgmAudio.paused) {
