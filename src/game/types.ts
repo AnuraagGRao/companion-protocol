@@ -1,4 +1,19 @@
 export type CompanionId = "koji" | "mochi" | "kai";
+export type OperatorId = "ren" | "aya" | "rowan";
+
+export interface HumanOperator {
+  id: OperatorId;
+  name: string;
+  identity: string;
+  title: string;
+  emoji: string;
+  accentHex: string;
+  baseHealthBonus: number;
+  baseSpeedBonus: number;
+  specialTrait: string;
+  traitDesc: string;
+  lore: string;
+}
 
 export interface CompanionData {
   id: CompanionId;
@@ -30,7 +45,11 @@ export interface PlayerState {
   xp: number;
   nextXp: number;
   facingAngle: number;
+  operator: HumanOperator;
   companion: CompanionData;
+  companionX: number;
+  companionY: number;
+  companionAngle: number;
   abilityCooldownTimer: number;
   isInvulnerable: boolean;
   invulnerableTimer: number;

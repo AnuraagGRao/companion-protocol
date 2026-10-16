@@ -7,8 +7,9 @@ import type {
   XpOrb,
   UpgradeCard,
   CompanionId,
+  OperatorId,
 } from "./types";
-import { COMPANIONS, drawCompanion } from "./companions";
+import { COMPANIONS, HUMAN_OPERATORS, drawHumanOperator, drawGuardianCompanion } from "./companions";
 import { ProceduralMap } from "./mapGenerator";
 import { EnemySpawner } from "./enemies";
 import { getRandomUpgrades, applyUpgrade } from "./upgrades";
@@ -52,34 +53,40 @@ export class GameEngine {
   private animId: number = 0;
   private lastTimestamp: number = 0;
 
-  constructor(canvas: HTMLCanvasElement, selectedCompanion: CompanionId) {
+  constructor(canvas: HTMLCanvasElement, selectedCompanion: CompanionId, selectedOperator: OperatorId = "ren") {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
     this.map = new ProceduralMap();
     this.spawner = new EnemySpawner();
 
     const comp = COMPANIONS[selectedCompanion];
+    const op = HUMAN_OPERATORS[selectedOperator];
+
     this.player = {
       x: 0,
       y: 0,
       vx: 0,
       vy: 0,
       radius: 20,
-      health: comp.baseHealth,
-      maxHealth: comp.baseHealth,
-      speed: comp.baseSpeed,
+      health: comp.baseHealth + op.baseHealthBonus,
+      maxHealth: comp.baseHealth + op.baseHealthBonus,
+      speed: comp.baseSpeed + op.baseSpeedBonus,
       level: 1,
       xp: 0,
       nextXp: 50,
       facingAngle: 0,
+      operator: op,
       companion: comp,
+      companionX: -32,
+      companionY: -24,
+      companionAngle: 0,
       abilityCooldownTimer: 0,
       isInvulnerable: false,
       invulnerableTimer: 0,
-      damageMultiplier: 1.0,
+      damageMultiplier: op.id === "ren" ? 1.2 : 1.0,
       fireRateMultiplier: 1.0,
       projectileSpeedMultiplier: 1.0,
-      pickupRange: 110,
+      pickupRange: op.id === "rowan" ? 150 : 110,
     };
 
     this.bindInputs();
@@ -255,6 +262,13 @@ export class GameEngine {
     const worldMouseX = this.mousePos.x - this.canvas.width / 2 + this.cameraX;
     const worldMouseY = this.mousePos.y - this.canvas.height / 2 + this.cameraY;
     this.player.facingAngle = Math.atan2(worldMouseY - this.player.y, worldMouseX - this.player.x);
+
+    // Immortal Guardian Companion orbits & protects the Human Operator
+    this.player.companionAngle += delta * 2.2;
+    const targetCompX = this.player.x + Math.cos(this.player.companionAngle) * 36;
+    const targetCompY = this.player.y + Math.sin(this.player.companionAngle) * 36;
+    this.player.companionX += (targetCompX - this.player.companionX) * 0.16;
+    this.player.companionY += (targetCompY - this.player.companionY) * 0.16;
 
     // Invulnerability & Cooldowns
     if (this.player.invulnerableTimer > 0) {
@@ -474,20 +488,23 @@ export class GameEngine {
       }
     }
 
+    const shotOriginX = this.player.companionX;
+    const shotOriginY = this.player.companionY;
+
     let angle = this.player.facingAngle;
     if (closestEnemy) {
-      angle = Math.atan2(closestEnemy.y - this.player.y, closestEnemy.x - this.player.x);
+      angle = Math.atan2(closestEnemy.y - shotOriginY, closestEnemy.x - shotOriginX);
     }
 
     const id = this.player.companion.id;
     sounds.playLaser(id === "kai" ? 750 : id === "mochi" ? 380 : 580);
 
     if (id === "koji") {
-      // Piercing Railgun
+      // Piercing Railgun fired by Guardian Koji
       this.projectiles.push({
         id: Math.random().toString(),
-        x: this.player.x,
-        y: this.player.y,
+        x: shotOriginX,
+        y: shotOriginY,
         vx: Math.cos(angle) * 16 * this.player.projectileSpeedMultiplier,
         vy: Math.sin(angle) * 16 * this.player.projectileSpeedMultiplier,
         radius: 6,
@@ -500,11 +517,11 @@ export class GameEngine {
       });
 
     } else if (id === "mochi") {
-      // Bouncing Yuzu Bomb
+      // Bouncing Yuzu Bomb fired by Guardian Mochi
       this.projectiles.push({
         id: Math.random().toString(),
-        x: this.player.x,
-        y: this.player.y,
+        x: shotOriginX,
+        y: shotOriginY,
         vx: Math.cos(angle) * 10 * this.player.projectileSpeedMultiplier,
         vy: Math.sin(angle) * 10 * this.player.projectileSpeedMultiplier,
         radius: 12,
@@ -517,13 +534,13 @@ export class GameEngine {
       });
 
     } else {
-      // Kai Triple Homing Blades
+      // Kai Triple Homing Blades fired by Guardian Kai
       [-0.25, 0, 0.25].forEach((offset) => {
         const bladeAngle = angle + offset;
         this.projectiles.push({
           id: Math.random().toString(),
-          x: this.player.x,
-          y: this.player.y,
+          x: shotOriginX,
+          y: shotOriginY,
           vx: Math.cos(bladeAngle) * 14 * this.player.projectileSpeedMultiplier,
           vy: Math.sin(bladeAngle) * 14 * this.player.projectileSpeedMultiplier,
           radius: 5,
@@ -662,8 +679,9 @@ export class GameEngine {
       ctx.globalAlpha = 1.0;
     });
 
-    // 6. Player Companion
-    drawCompanion(ctx, this.player, this.gameTime);
+    // 6. Human Operator & Guardian Companion
+    drawHumanOperator(ctx, this.player, this.gameTime);
+    drawGuardianCompanion(ctx, this.player, this.gameTime);
 
     // 7. Damage Numbers
     this.damageNumbers.forEach((dn) => {

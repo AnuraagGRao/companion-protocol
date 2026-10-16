@@ -1,19 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import { GameEngine } from "./game/engine";
-import type { CompanionId, UpgradeCard, PlayerState } from "./game/types";
-import { COMPANIONS } from "./game/companions";
+import type { CompanionId, OperatorId, UpgradeCard, PlayerState } from "./game/types";
+import { COMPANIONS, HUMAN_OPERATORS, drawSadCompanion } from "./game/companions";
 import { sounds, type BgmTrackInfo } from "./game/sound";
 import { 
-  Shield, Zap, Volume2, VolumeX, Play, RotateCw, 
-  Sparkles, Trophy, Flame, ChevronRight
+  Shield, Zap, Volume2, VolumeX, Play, 
+  Sparkles, Trophy, Flame, ChevronRight, User, Heart, AlertOctagon
 } from "lucide-react";
 
 export default function App() {
   const [gameState, setGameState] = useState<"menu" | "playing" | "gameover">("menu");
+  const [selectedOperator, setSelectedOperator] = useState<OperatorId>("ren");
   const [selectedCompanion, setSelectedCompanion] = useState<CompanionId>("koji");
   const [pendingUpgrades, setPendingUpgrades] = useState<UpgradeCard[] | null>(null);
   const [isMuted, setIsMuted] = useState(sounds.isMuted);
   const [currentBgm, setCurrentBgm] = useState<BgmTrackInfo | null>(sounds.currentTrack);
+  const [isHoveringAbandon, setIsHoveringAbandon] = useState(false);
 
   // Live HUD States
   const [playerHp, setPlayerHp] = useState(160);
@@ -29,6 +31,7 @@ export default function App() {
   const [gameStats, setGameStats] = useState({ score: 0, wave: 1, time: 0 });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const sadCanvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
 
   // Load High Score & Initialize Soundtrack Listeners
@@ -63,13 +66,31 @@ export default function App() {
     };
   }, []);
 
-  const startGame = (comp: CompanionId) => {
+  // Sad Companion Animation on Game Over Screen
+  useEffect(() => {
+    if (gameState !== "gameover" || !sadCanvasRef.current) return;
+    const canvas = sadCanvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId = 0;
+    const renderSad = (timestamp: number) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawSadCompanion(ctx, selectedCompanion, canvas.width / 2, 75, isHoveringAbandon, timestamp / 1000);
+      animId = requestAnimationFrame(renderSad);
+    };
+
+    animId = requestAnimationFrame(renderSad);
+    return () => cancelAnimationFrame(animId);
+  }, [gameState, selectedCompanion, isHoveringAbandon]);
+
+  const startGame = (comp: CompanionId, op: OperatorId) => {
     setGameState("playing");
     setPendingUpgrades(null);
 
     setTimeout(() => {
       if (!canvasRef.current) return;
-      const engine = new GameEngine(canvasRef.current, comp);
+      const engine = new GameEngine(canvasRef.current, comp, op);
 
       engine.onStatsUpdate = (player: PlayerState, currentBaseHp: number, currentWave: number, currentScore: number) => {
         setPlayerHp(player.health);
@@ -114,6 +135,20 @@ export default function App() {
   };
 
   const currentCompData = COMPANIONS[selectedCompanion];
+  const currentOpData = HUMAN_OPERATORS[selectedOperator];
+
+  // Companion dialogues for the Game Over Screen
+  const getSadCompanionQuote = () => {
+    if (isHoveringAbandon) {
+      if (selectedCompanion === "koji") return "Operator... please! Don't leave me alone in the glitch storm! Click Retry!";
+      if (selectedCompanion === "mochi") return "Wait... you're really quitting? Please don't leave me... I'll wait right here...";
+      return "No, don't leave me behind! We can reboot together... please don't quit!";
+    }
+
+    if (selectedCompanion === "koji") return "Operator... please stand back up! The Sanctuary Core is under heavy attack, and I can't hold the line without you.";
+    if (selectedCompanion === "mochi") return "I kept your tea warm... please open your eyes. We can reboot the core together!";
+    return "Hey... this isn't over! You promised we'd clear Sector 10! Stand back up, Operator!";
+  };
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-slate-950 font-sans select-none">
@@ -149,131 +184,186 @@ export default function App() {
 
       {/* ── Main Menu / Character Select Screen ─────────────────────────────── */}
       {gameState === "menu" && (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-between p-6 sm:p-12 overflow-y-auto">
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-between p-4 sm:p-8 overflow-y-auto">
           {/* Header Title */}
-          <div className="flex flex-col items-center text-center space-y-3 mt-4">
+          <div className="flex flex-col items-center text-center space-y-2 mt-2">
             <div className="glass-pill px-4 py-1.5 flex items-center gap-2 text-xs font-mono text-cyan-400">
               <Sparkles className="w-3.5 h-3.5 animate-spin" />
               <span>EDGE PROTOCOL // SURVIVOR ROGUELITE</span>
             </div>
-            <h1 className="text-4xl sm:text-6xl font-black uppercase tracking-tight text-white">
+            <h1 className="text-3xl sm:text-5xl font-black uppercase tracking-tight text-white">
               COMPANION <span className="text-cyan-400">PROTOCOL</span>
             </h1>
-            <p className="text-xs sm:text-sm font-mono text-slate-400 max-w-lg">
-              Defend the Sanctuary Base Core against swarming glitch daemons. Explore infinite procedural sectors, capture shrines, and survive.
+            <p className="text-xs sm:text-sm font-mono text-slate-400 max-w-xl">
+              Human operators can perish under daemon assault, but guardian familiars are immortal anomalies who will protect you with their lives.
             </p>
           </div>
 
-          {/* Companion Selection Roster */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full my-6">
-            {(Object.values(COMPANIONS)).map((c) => {
-              const isSelected = c.id === selectedCompanion;
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => setSelectedCompanion(c.id)}
-                  className={`glass-panel p-6 flex flex-col items-center text-center cursor-pointer transition-all duration-300 relative ${
-                    isSelected
-                      ? "ring-2 scale-105 shadow-2xl"
-                      : "opacity-70 hover:opacity-100 hover:scale-100"
-                  }`}
-                  style={{
-                    borderColor: isSelected ? c.accentHex : "rgba(255,255,255,0.12)",
-                    boxShadow: isSelected ? `0 20px 50px -10px ${c.accentHex}40` : "none",
-                  }}
-                >
-                  <div className="text-5xl mb-3">{c.emoji}</div>
-                  <h3 className="text-xl font-extrabold text-white">{c.name}</h3>
-                  <p className="text-xs font-mono text-slate-400 mb-4">{c.species} · {c.title}</p>
+          <div className="max-w-4xl w-full my-4 space-y-6">
+            {/* Step 1: Human Operator Selection */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <User className="w-4 h-4 text-sky-400" />
+                <span className="text-xs font-mono font-bold tracking-widest text-slate-300 uppercase">
+                  STEP 1: CHOOSE HUMAN OPERATOR (MORTAL SURVIVOR)
+                </span>
+              </div>
 
-                  <div className="w-full space-y-2 text-left text-xs font-mono border-t border-white/10 pt-3">
-                    <div className="flex justify-between text-slate-300">
-                      <span>Weapon:</span>
-                      <span className="font-bold text-white">{c.weaponName}</span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(Object.values(HUMAN_OPERATORS)).map((op) => {
+                  const isSelected = op.id === selectedOperator;
+                  return (
+                    <div
+                      key={op.id}
+                      onClick={() => setSelectedOperator(op.id)}
+                      className={`glass-panel p-4 flex flex-col cursor-pointer transition-all duration-300 relative ${
+                        isSelected
+                          ? "ring-2 scale-102 shadow-2xl"
+                          : "opacity-70 hover:opacity-100 hover:scale-100"
+                      }`}
+                      style={{
+                        borderColor: isSelected ? op.accentHex : "rgba(255,255,255,0.12)",
+                        boxShadow: isSelected ? `0 15px 40px -10px ${op.accentHex}40` : "none",
+                      }}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="text-3xl">{op.emoji}</div>
+                        <div>
+                          <h3 className="text-base font-extrabold text-white">{op.name}</h3>
+                          <div className="text-[11px] font-mono text-slate-400">{op.identity}</div>
+                        </div>
+                      </div>
+                      <p className="text-[11px] font-mono text-slate-300 mb-2 leading-relaxed">{op.lore}</p>
+                      <div className="mt-auto border-t border-white/10 pt-2 text-[11px] font-mono">
+                        <span className="text-slate-400">Trait: </span>
+                        <span className="font-bold text-sky-300">{op.specialTrait}</span>
+                        <div className="text-[10px] text-slate-400">{op.traitDesc}</div>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span>Special:</span>
-                      <span className="font-bold text-white">{c.abilityName}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span>Base HP:</span>
-                      <span className="font-bold text-emerald-400">{c.baseHealth}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Controls & Launch Bar */}
-          <div className="flex flex-col items-center space-y-4 mb-4">
-            <div className="flex items-center gap-6 text-xs font-mono text-slate-400">
-              <span>⌨️ WASD / Arrows to Move</span>
-              <span>⚡ Spacebar for Special Ability</span>
-              <span>🎯 Auto-Targeting Laser Weapons</span>
+                  );
+                })}
+              </div>
             </div>
 
+            {/* Step 2: Guardian Familiar Selection */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Shield className="w-4 h-4 text-cyan-400" />
+                <span className="text-xs font-mono font-bold tracking-widest text-slate-300 uppercase">
+                  STEP 2: CHOOSE GUARDIAN FAMILIAR (IMMORTAL ANOMALY)
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(Object.values(COMPANIONS)).map((c) => {
+                  const isSelected = c.id === selectedCompanion;
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => setSelectedCompanion(c.id)}
+                      className={`glass-panel p-4 flex flex-col cursor-pointer transition-all duration-300 relative ${
+                        isSelected
+                          ? "ring-2 scale-102 shadow-2xl"
+                          : "opacity-70 hover:opacity-100 hover:scale-100"
+                      }`}
+                      style={{
+                        borderColor: isSelected ? c.accentHex : "rgba(255,255,255,0.12)",
+                        boxShadow: isSelected ? `0 15px 40px -10px ${c.accentHex}40` : "none",
+                      }}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="text-3xl">{c.emoji}</div>
+                        <div>
+                          <h3 className="text-base font-extrabold text-white">{c.name}</h3>
+                          <div className="text-[11px] font-mono text-slate-400">{c.species}</div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 text-left text-[11px] font-mono border-t border-white/10 pt-2">
+                        <div className="flex justify-between text-slate-300">
+                          <span className="text-slate-400">Weapon:</span>
+                          <span className="font-bold text-white">{c.weaponName}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-300">
+                          <span className="text-slate-400">Special:</span>
+                          <span className="font-bold text-white">{c.abilityName}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-300">
+                          <span className="text-slate-400">Base Shield:</span>
+                          <span className="font-bold text-emerald-400">{c.baseHealth} HP</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Launch Mission Button */}
+          <div className="flex flex-col items-center gap-3 w-full max-w-md my-2">
             <button
-              onClick={() => startGame(selectedCompanion)}
-              className="px-8 py-4 rounded-2xl font-mono font-bold text-sm text-slate-950 uppercase tracking-wider flex items-center gap-3 shadow-2xl transition-all duration-200 hover:scale-105 active:scale-95"
-              style={{
-                backgroundColor: currentCompData.accentHex,
-                boxShadow: `0 15px 40px -10px ${currentCompData.accentHex}`,
-              }}
+              onClick={() => startGame(selectedCompanion, selectedOperator)}
+              className="w-full py-4 rounded-2xl font-mono font-black text-sm tracking-wider uppercase text-slate-950 bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400 hover:from-cyan-300 hover:to-indigo-300 shadow-[0_0_35px_rgba(6,182,212,0.5)] hover:scale-102 active:scale-98 transition-all flex items-center justify-center gap-3 cursor-pointer"
             >
-              <Play className="w-4 h-4 fill-slate-950" />
-              <span>Deploy {currentCompData.name} ({currentCompData.species})</span>
-              <ChevronRight className="w-4 h-4" />
+              <Play className="w-5 h-5 fill-slate-950" />
+              <span>LAUNCH WITH {currentOpData.name.toUpperCase()} & {currentCompData.name.toUpperCase()}</span>
+              <ChevronRight className="w-5 h-5" />
             </button>
+            <div className="text-[11px] font-mono text-slate-400">
+              High Score: <span className="text-cyan-400 font-bold">{highScore.toLocaleString()}</span>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── In-Game Glassmorphic HUD ────────────────────────────────────────── */}
+      {/* ── Active Game HUD ─────────────────────────────────────────────────── */}
       {gameState === "playing" && (
         <div className="absolute inset-0 z-20 pointer-events-none p-4 sm:p-6 flex flex-col justify-between">
           {/* Top Status Bar */}
           <div className="flex items-start justify-between w-full">
-            {/* Operator HP & Level */}
-            <div className="glass-panel p-3.5 space-y-2 pointer-events-auto min-w-[220px]">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="font-bold text-white flex items-center gap-1.5">
-                  <span>{currentCompData.emoji}</span>
-                  <span>{currentCompData.name}</span>
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 font-bold">
-                  LVL {level}
-                </span>
-              </div>
+            {/* Operator HP & XP Gauge */}
+            <div className="flex flex-col gap-2 max-w-xs w-full pointer-events-auto">
+              <div className="glass-panel p-3 flex flex-col gap-1.5">
+                <div className="flex justify-between items-center text-xs font-mono">
+                  <span className="font-bold text-white flex items-center gap-1.5">
+                    <span>{currentOpData.emoji}</span>
+                    <span>{currentOpData.name} ({currentCompData.emoji} {currentCompData.name})</span>
+                  </span>
+                  <span className="text-slate-400">LVL {level}</span>
+                </div>
 
-              {/* Player HP Bar */}
-              <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-white/10">
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-200"
-                  style={{ width: `${Math.max(0, (playerHp / playerMaxHp) * 100)}%` }}
-                />
-              </div>
+                {/* HP Bar */}
+                <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-white/10">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-150"
+                    style={{ width: `${Math.max(0, (playerHp / playerMaxHp) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] font-mono text-slate-400">
+                  <span>OPERATOR HP</span>
+                  <span>{Math.round(playerHp)} / {playerMaxHp}</span>
+                </div>
 
-              {/* XP Progress Bar */}
-              <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-white/10">
-                <div
-                  className="h-full bg-gradient-to-r from-cyan-400 to-purple-500 transition-all duration-150"
-                  style={{ width: `${Math.min(100, (playerXp / nextXp) * 100)}%` }}
-                />
+                {/* XP Bar */}
+                <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-white/5">
+                  <div
+                    className="h-full bg-cyan-400 transition-all duration-150"
+                    style={{ width: `${Math.min(100, (playerXp / nextXp) * 100)}%` }}
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Sanctuary Base Core Health */}
-            <div className="glass-panel p-3.5 flex flex-col items-center pointer-events-auto min-w-[200px]">
-              <div className="flex items-center gap-2 text-xs font-mono text-cyan-400 font-bold">
+            {/* Sanctuary Base Health Indicator */}
+            <div className="glass-panel px-5 py-2.5 flex flex-col items-center pointer-events-auto">
+              <div className="flex items-center gap-2 text-xs font-mono font-bold text-cyan-400">
                 <Shield className="w-4 h-4" />
                 <span>SANCTUARY BASE CORE</span>
               </div>
-              <div className="w-full mt-2 bg-slate-900 rounded-full h-3 overflow-hidden border border-white/15">
+              <div className="w-44 h-2 bg-slate-900 rounded-full overflow-hidden mt-1.5 border border-white/10">
                 <div
-                  className={`h-full transition-all duration-200 ${
-                    baseHp / 1000 > 0.4 ? "bg-cyan-500" : "bg-red-500 animate-pulse"
-                  }`}
+                  className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-200"
                   style={{ width: `${Math.max(0, (baseHp / 1000) * 100)}%` }}
                 />
               </div>
@@ -296,7 +386,7 @@ export default function App() {
 
               <button
                 onClick={toggleSound}
-                className="glass-panel p-2.5 text-slate-300 hover:text-white transition-all"
+                className="glass-panel p-2.5 text-slate-300 hover:text-white transition-all cursor-pointer"
                 title="Mute / Unmute"
               >
                 {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -307,7 +397,7 @@ export default function App() {
           {/* Bottom Controls / Special Ability Trigger */}
           <div className="flex items-end justify-between w-full">
             <div className="hidden sm:block text-[11px] font-mono text-slate-400 glass-pill px-3 py-1">
-              💡 Stand in Sanctuary Base to regenerate HP
+              💡 Stand in Sanctuary Base to regenerate HP · WASD/Arrows to Move · Companion Auto-Fires
             </div>
 
             {/* Ability Button */}
@@ -368,42 +458,77 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Game Over Screen ─────────────────────────────────────────────────── */}
+      {/* ── Heartbreaking Game Over & Sad Companion Screen ───────────────────── */}
       {gameState === "gameover" && (
-        <div className="absolute inset-0 z-40 bg-slate-950/90 backdrop-blur-lg flex flex-col items-center justify-center p-6 text-center select-none">
-          <div className="glass-panel p-8 sm:p-12 max-w-lg w-full flex flex-col items-center space-y-6">
-            <div className="text-5xl">💀</div>
-            <div className="space-y-1">
-              <h2 className="text-3xl sm:text-4xl font-black text-rose-500 uppercase tracking-tight">
-                SIGNAL TERMINATED
-              </h2>
-              <p className="text-xs font-mono text-slate-400">
-                The Sanctuary Core or Operator has fallen to the glitch swarm.
+        <div className="absolute inset-0 z-40 bg-slate-950/92 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in duration-300">
+          <div className="glass-panel p-8 sm:p-10 max-w-lg w-full flex flex-col items-center space-y-5 border border-rose-500/30">
+            {/* Header Badge */}
+            <div className="glass-pill px-4 py-1.5 flex items-center gap-2 text-xs font-mono text-rose-400 border border-rose-500/40">
+              <AlertOctagon className="w-3.5 h-3.5" />
+              <span>OPERATOR VITALS CRITICAL</span>
+            </div>
+
+            {/* Crying / Heartbroken Companion Canvas */}
+            <div className="relative w-full flex justify-center py-1">
+              <canvas
+                ref={sadCanvasRef}
+                width={280}
+                height={160}
+                className="rounded-xl border border-white/5 bg-slate-900/40 shadow-inner"
+              />
+            </div>
+
+            {/* Companion Dialogue Bubble */}
+            <div className={`p-4 rounded-xl border text-xs font-mono transition-all duration-300 ${
+              isHoveringAbandon 
+                ? "bg-rose-950/60 border-rose-500/50 text-rose-200 scale-102 shadow-lg"
+                : "bg-slate-900/80 border-cyan-500/30 text-slate-200"
+            }`}>
+              <div className="font-bold text-xs uppercase mb-1 flex items-center justify-center gap-1.5 text-cyan-300">
+                <span>{currentCompData.emoji}</span>
+                <span>{currentCompData.name} ({currentCompData.species})</span>
+              </div>
+              <p className="italic leading-relaxed">
+                "{getSadCompanionQuote()}"
               </p>
             </div>
 
+            {/* Mission Stats */}
             <div className="w-full grid grid-cols-3 gap-3 font-mono text-center">
-              <div className="glass-panel p-3">
+              <div className="glass-panel p-2.5">
                 <div className="text-[10px] text-slate-400">SCORE</div>
                 <div className="text-base font-bold text-white">{gameStats.score.toLocaleString()}</div>
               </div>
-              <div className="glass-panel p-3">
-                <div className="text-[10px] text-slate-400">WAVES</div>
+              <div className="glass-panel p-2.5">
+                <div className="text-[10px] text-slate-400">WAVE</div>
                 <div className="text-base font-bold text-orange-400">{gameStats.wave}</div>
               </div>
-              <div className="glass-panel p-3">
+              <div className="glass-panel p-2.5">
                 <div className="text-[10px] text-slate-400">TIME</div>
                 <div className="text-base font-bold text-cyan-400">{gameStats.time}s</div>
               </div>
             </div>
 
-            <button
-              onClick={() => setGameState("menu")}
-              className="w-full py-4 rounded-xl font-mono font-bold text-sm text-slate-950 bg-cyan-400 hover:bg-cyan-300 uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl hover:scale-105 transition-all"
-            >
-              <RotateCw className="w-4 h-4" />
-              <span>Return to Sanctuary Deck</span>
-            </button>
+            {/* Action Buttons: Yes to Retry vs Leave */}
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
+              <button
+                onClick={() => startGame(selectedCompanion, selectedOperator)}
+                onMouseEnter={() => setIsHoveringAbandon(false)}
+                className="flex-1 py-3.5 rounded-xl font-mono font-black text-xs uppercase tracking-wider text-slate-950 bg-gradient-to-r from-emerald-400 to-cyan-400 hover:from-emerald-300 hover:to-cyan-300 shadow-[0_0_25px_rgba(52,211,153,0.4)] hover:scale-103 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Heart className="w-4 h-4 fill-slate-950 text-slate-950" />
+                <span>STAND BACK UP // RETRY</span>
+              </button>
+
+              <button
+                onClick={() => setGameState("menu")}
+                onMouseEnter={() => setIsHoveringAbandon(true)}
+                onMouseLeave={() => setIsHoveringAbandon(false)}
+                className="px-5 py-3.5 rounded-xl font-mono text-xs text-slate-400 hover:text-rose-300 hover:bg-rose-950/40 border border-white/10 hover:border-rose-500/40 transition-all cursor-pointer"
+              >
+                Abandon Run
+              </button>
+            </div>
           </div>
         </div>
       )}
