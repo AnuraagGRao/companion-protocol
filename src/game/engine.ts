@@ -116,7 +116,7 @@ export class GameEngine {
     this.isRunning = true;
     this.isPaused = false;
     this.lastTimestamp = performance.now();
-    sounds.startAmbientDrone();
+    sounds.playCombatTheme();
     this.loop(this.lastTimestamp);
   }
 
@@ -285,6 +285,11 @@ export class GameEngine {
     // 3. Spawner & Enemies
     const newEnemies = this.spawner.update(delta, this.player, this.map.base, this.enemies);
     this.enemies.push(...newEnemies);
+
+    // Dynamic wave progression: Wave 5+ initiates Boss / Overdrive Darksynth
+    if (this.spawner.wave >= 5 && sounds.currentTrack?.id !== "boss") {
+      sounds.playBossTheme();
+    }
 
     // Update enemies
     for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -549,6 +554,7 @@ export class GameEngine {
   private handleGameOver() {
     this.stop();
     sounds.playExplosion(true);
+    sounds.playMenuTheme();
     if (this.onGameOver) {
       this.onGameOver(this.score, this.spawner.wave, Math.round(this.gameTime));
     }

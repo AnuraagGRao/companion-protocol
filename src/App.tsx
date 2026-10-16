@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { GameEngine } from "./game/engine";
 import type { CompanionId, UpgradeCard, PlayerState } from "./game/types";
 import { COMPANIONS } from "./game/companions";
-import { sounds } from "./game/sound";
+import { sounds, type BgmTrackInfo } from "./game/sound";
 import { 
   Shield, Zap, Volume2, VolumeX, Play, RotateCw, 
   Sparkles, Trophy, Flame, ChevronRight
@@ -13,6 +13,7 @@ export default function App() {
   const [selectedCompanion, setSelectedCompanion] = useState<CompanionId>("koji");
   const [pendingUpgrades, setPendingUpgrades] = useState<UpgradeCard[] | null>(null);
   const [isMuted, setIsMuted] = useState(sounds.isMuted);
+  const [currentBgm, setCurrentBgm] = useState<BgmTrackInfo | null>(sounds.currentTrack);
 
   // Live HUD States
   const [playerHp, setPlayerHp] = useState(160);
@@ -30,10 +31,36 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
 
-  // Load High Score
+  // Load High Score & Initialize Soundtrack Listeners
   useEffect(() => {
     const saved = localStorage.getItem("cp_highscore");
     if (saved) setHighScore(parseInt(saved, 10));
+
+    sounds.onTrackChange = (track) => {
+      setCurrentBgm({ ...track });
+    };
+
+    // Auto-engage menu theme on user interaction
+    const handleFirstInteraction = () => {
+      if (!sounds.currentTrack && gameState === "menu") {
+        sounds.playMenuTheme();
+      }
+      window.removeEventListener("pointerdown", handleFirstInteraction);
+      window.removeEventListener("keydown", handleFirstInteraction);
+    };
+
+    window.addEventListener("pointerdown", handleFirstInteraction);
+    window.addEventListener("keydown", handleFirstInteraction);
+
+    // Initial attempt to start menu music
+    if (gameState === "menu") {
+      sounds.playMenuTheme();
+    }
+
+    return () => {
+      window.removeEventListener("pointerdown", handleFirstInteraction);
+      window.removeEventListener("keydown", handleFirstInteraction);
+    };
   }, []);
 
   const startGame = (comp: CompanionId) => {
@@ -95,6 +122,30 @@ export default function App() {
         ref={canvasRef}
         className={`w-full h-full ${gameState === "playing" ? "block" : "hidden"}`}
       />
+
+      {/* ── Persistent Soundtrack Indicator & Menu Mute ──────────────────────── */}
+      <div className="absolute top-4 right-4 z-40 flex items-center gap-2 pointer-events-auto">
+        {currentBgm && !isMuted && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/90 border border-cyan-500/30 rounded-full text-xs font-mono text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.2)] backdrop-blur">
+            <div className="flex items-end gap-0.5 h-3">
+              <span className="w-0.5 bg-cyan-400 rounded-full animate-pulse h-full" />
+              <span className="w-0.5 bg-cyan-400 rounded-full animate-bounce h-2/3" />
+              <span className="w-0.5 bg-cyan-400 rounded-full animate-pulse h-4/5" />
+            </div>
+            <span className="font-semibold text-white truncate max-w-[130px] sm:max-w-none">{currentBgm.title}</span>
+            <span className="text-cyan-400/60 hidden sm:inline">// {currentBgm.bpm} BPM</span>
+          </div>
+        )}
+        {gameState !== "playing" && (
+          <button
+            onClick={toggleSound}
+            className="glass-panel p-2.5 text-slate-300 hover:text-white transition-all rounded-xl cursor-pointer"
+            title={isMuted ? "Unmute Audio" : "Mute Audio"}
+          >
+            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
+          </button>
+        )}
+      </div>
 
       {/* ── Main Menu / Character Select Screen ─────────────────────────────── */}
       {gameState === "menu" && (

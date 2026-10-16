@@ -2,12 +2,62 @@
  * Web Audio DSP Synthesizer & BGM Manager
  * Generates arcade SFX in real-time and manages background music.
  */
+
+export interface BgmTrackInfo {
+  id: "menu" | "combat" | "boss" | "orbit";
+  title: string;
+  artist: string;
+  bpm: number;
+  genre: string;
+  src: string;
+}
+
+export const SOUNDTRACK: Record<string, BgmTrackInfo> = {
+  menu: {
+    id: "menu",
+    title: "Midnight at the Bamboo Gate",
+    artist: "Anuraag Rao",
+    bpm: 86,
+    genre: "Neo-Tokyo Lofi",
+    src: "/audio/Midnight_at_the_Bamboo_Gate.mp3"
+  },
+  combat: {
+    id: "combat",
+    title: "Turbo Arcade Runner",
+    artist: "Anuraag Rao",
+    bpm: 130,
+    genre: "Synthwave Electro",
+    src: "/audio/Turbo_Arcade_Runner.mp3"
+  },
+  boss: {
+    id: "boss",
+    title: "Hardline Extraction",
+    artist: "Anuraag Rao",
+    bpm: 144,
+    genre: "Darksynth Breakbeat",
+    src: "/audio/Hardline_Extraction.mp3"
+  },
+  orbit: {
+    id: "orbit",
+    title: "Orbiting the Pale Star",
+    artist: "Anuraag Rao",
+    bpm: 60,
+    genre: "Deep Space Ambient",
+    src: "/audio/Orbiting_the_Pale_Star.mp3"
+  }
+};
+
 export class SoundEngine {
   private ctx: AudioContext | null = null;
   private bgmAudio: HTMLAudioElement | null = null;
   private ambientOsc: OscillatorNode | null = null;
   private ambientGain: GainNode | null = null;
   public isMuted: boolean = false;
+
+  // High-Fidelity BGM Manager
+  public currentTrack: BgmTrackInfo | null = null;
+  public onTrackChange?: (track: BgmTrackInfo) => void;
+  private fadeInterval: number | null = null;
 
   constructor() {
     this.isMuted = localStorage.getItem("cp_muted") === "true";
@@ -173,23 +223,68 @@ export class SoundEngine {
     }
   }
 
-  // Load and play custom background music MP3 (drop into /audio/)
-  playCustomBgm(src: string) {
+  // ── High-Fidelity BGM Manager ───────────────────────────────────────────
+  playTrack(key: "menu" | "combat" | "boss" | "orbit") {
+    const track = SOUNDTRACK[key];
+    if (!track) return;
+    if (this.currentTrack?.id === key && this.bgmAudio && !this.bgmAudio.paused) {
+      return; // Already playing
+    }
+
+    this.currentTrack = track;
+    if (this.onTrackChange) {
+      this.onTrackChange(track);
+    }
+
     if (this.isMuted) return;
     this.stopAmbientDrone();
 
     if (!this.bgmAudio) {
-      this.bgmAudio = new Audio(src);
+      this.bgmAudio = new Audio();
       this.bgmAudio.loop = true;
       this.bgmAudio.volume = 0.45;
-    } else {
-      this.bgmAudio.src = src;
     }
 
+    // Smooth quick volume crossfade
+    if (this.fadeInterval) clearInterval(this.fadeInterval);
+    const audio = this.bgmAudio;
+
+    if (!audio.paused && audio.volume > 0.05) {
+      let vol = audio.volume;
+      this.fadeInterval = window.setInterval(() => {
+        vol = Math.max(0, vol - 0.1);
+        audio.volume = vol;
+        if (vol <= 0.02) {
+          if (this.fadeInterval) clearInterval(this.fadeInterval);
+          this.fadeInterval = null;
+          this.loadAndStartTrack(track.src);
+        }
+      }, 35);
+    } else {
+      this.loadAndStartTrack(track.src);
+    }
+  }
+
+  private loadAndStartTrack(src: string) {
+    if (!this.bgmAudio) return;
+    this.bgmAudio.src = src;
+    this.bgmAudio.volume = 0.45;
     this.bgmAudio.play().catch(() => {
-      // If file doesn't exist yet, fallback to procedural ambient drone
+      // Fallback to procedural synth drone if audio file fails or browser blocks autoplay
       this.startAmbientDrone();
     });
+  }
+
+  playMenuTheme() {
+    this.playTrack("menu");
+  }
+
+  playCombatTheme() {
+    this.playTrack("combat");
+  }
+
+  playBossTheme() {
+    this.playTrack("boss");
   }
 
   toggleMute(): boolean {
@@ -199,7 +294,11 @@ export class SoundEngine {
       this.stopAmbientDrone();
       if (this.bgmAudio) this.bgmAudio.pause();
     } else {
-      this.startAmbientDrone();
+      if (this.currentTrack) {
+        this.playTrack(this.currentTrack.id);
+      } else {
+        this.playMenuTheme();
+      }
     }
     return this.isMuted;
   }
