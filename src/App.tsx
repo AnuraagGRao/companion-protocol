@@ -555,23 +555,23 @@ export default function App() {
 
       {/* ── Level-Up Upgrade Cards Modal ────────────────────────────────────── */}
       {pendingUpgrades && (
-        <div className="absolute inset-0 z-40 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center p-6 select-none animate-fadeIn">
-          <div className="text-center space-y-2 mb-8">
-            <div className="glass-pill px-4 py-1.5 text-xs font-mono text-cyan-400 inline-flex items-center gap-1.5">
+        <div className="absolute inset-0 z-40 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-4 sm:p-6 select-none animate-fadeIn overflow-y-auto">
+          <div className="text-center space-y-1.5 sm:space-y-2 mb-4 sm:mb-8 mt-auto sm:mt-0">
+            <div className="glass-pill px-3 py-1 sm:px-4 sm:py-1.5 text-xs font-mono text-cyan-400 inline-flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5" />
               <span>OPERATOR LEVEL UP</span>
             </div>
-            <h2 className="text-3xl sm:text-5xl font-black uppercase text-white tracking-tight">
+            <h2 className="text-2xl sm:text-5xl font-black uppercase text-white tracking-tight">
               SELECT AN UPGRADE
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-6 max-w-4xl w-full max-h-[75vh] overflow-y-auto p-1 mb-auto sm:mb-0">
             {pendingUpgrades.map((card) => (
               <div
                 key={card.id}
                 onClick={() => handleSelectUpgrade(card)}
-                className="glass-panel p-6 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:scale-105 hover:border-cyan-400 hover:shadow-2xl group"
+                className="glass-panel p-4 sm:p-6 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 hover:border-cyan-400 hover:shadow-2xl group"
               >
                 <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">
                   {card.icon}
