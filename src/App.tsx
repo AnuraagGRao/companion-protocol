@@ -28,6 +28,11 @@ export default function App() {
   const [wave, setWave] = useState(1);
   const [score, setScore] = useState(0);
   const [abilityCooldown, setAbilityCooldown] = useState(0);
+  const [dashCooldown, setDashCooldown] = useState(0);
+  const [killStreak, setKillStreak] = useState(0);
+  const [streakMultiplier, setStreakMultiplier] = useState(1.0);
+  const [isEvolved, setIsEvolved] = useState(false);
+  const [evolutionTitle, setEvolutionTitle] = useState<string | undefined>(undefined);
   const [highScore, setHighScore] = useState(0);
   const [gameStats, setGameStats] = useState({ score: 0, wave: 1, time: 0 });
 
@@ -152,6 +157,11 @@ export default function App() {
         setWave(currentWave);
         setScore(currentScore);
         setAbilityCooldown(player.abilityCooldownTimer);
+        setDashCooldown(player.dashCooldownTimer);
+        setKillStreak(player.killStreak);
+        setStreakMultiplier(player.streakMultiplier);
+        setIsEvolved(player.isEvolved);
+        setEvolutionTitle(player.evolutionTitle);
       };
 
       engine.onLevelUp = (cards: UpgradeCard[]) => {
@@ -449,6 +459,33 @@ export default function App() {
 
             {/* Wave & Score Pills */}
             <div className="flex items-center gap-1.5 sm:gap-3 pointer-events-auto">
+              {/* Adrenaline Kill Streak Multiplier */}
+              {killStreak > 0 && (
+                <div
+                  className={`glass-panel px-2.5 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 text-[10px] sm:text-xs font-mono font-black transition-all ${
+                    killStreak >= 50
+                      ? "border-amber-400 text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.5)] animate-pulse"
+                      : killStreak >= 25
+                      ? "border-purple-400 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.4)]"
+                      : killStreak >= 10
+                      ? "border-cyan-400 text-cyan-300"
+                      : "text-slate-300 border-white/10"
+                  }`}
+                  title={`${killStreak} Enemies Neutralized (Active Multiplier)`}
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{streakMultiplier.toFixed(1)}x XP ({killStreak})</span>
+                </div>
+              )}
+
+              {/* Weapon Evolution Badge */}
+              {isEvolved && (
+                <div className="glass-panel px-2.5 py-1 sm:px-3.5 sm:py-1.5 hidden sm:flex items-center gap-1.5 text-[10px] sm:text-xs font-mono font-extrabold text-amber-300 border-amber-400/50 shadow-[0_0_15px_rgba(245,158,11,0.3)] animate-pulse">
+                  <span>⚡</span>
+                  <span className="truncate max-w-[150px]">{evolutionTitle || "EVOLVED"}</span>
+                </div>
+              )}
+
               <div className="glass-panel px-2.5 py-1 sm:px-4 sm:py-2 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-mono text-white font-bold">
                 <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-400" />
                 <span>W{wave}</span>
@@ -507,8 +544,25 @@ export default function App() {
             </div>
           </div>
 
-          {/* ── Mobile Ability Button ────────────────────────────────────────── */}
-          <div className="fixed bottom-6 right-6 z-30 pointer-events-auto md:hidden">
+          {/* ── Mobile Action Buttons (Special & Dash) ────────────────────────── */}
+          <div className="fixed bottom-6 right-6 z-30 pointer-events-auto flex items-end gap-3 md:hidden">
+            {/* Mobile Dash Button */}
+            <button
+              onClick={() => engineRef.current?.triggerDash()}
+              disabled={dashCooldown > 0}
+              className={`w-16 h-16 rounded-full flex flex-col items-center justify-center p-2 border transition-all shadow-xl active:scale-95 cursor-pointer ${
+                dashCooldown <= 0
+                  ? "bg-indigo-950/80 border-indigo-400 text-white shadow-[0_0_20px_rgba(99,102,241,0.5)] active:border-indigo-300"
+                  : "bg-slate-900/80 border-slate-700 text-slate-500 opacity-60"
+              }`}
+            >
+              <Sparkles className={`w-5 h-5 ${dashCooldown <= 0 ? "text-indigo-400" : "text-slate-500"}`} />
+              <span className="text-[9px] font-mono font-bold mt-0.5 uppercase tracking-tighter">
+                {dashCooldown > 0 ? `${dashCooldown.toFixed(1)}s` : "DASH"}
+              </span>
+            </button>
+
+            {/* Mobile Ability Button */}
             <button
               onClick={() => engineRef.current?.triggerAbility()}
               disabled={abilityCooldown > 0}
@@ -528,27 +582,48 @@ export default function App() {
           {/* ── Desktop Bottom Controls & Info ──────────────────────────────── */}
           <div className="hidden md:flex items-end justify-between w-full">
             <div className="text-[11px] font-mono text-slate-400 glass-pill px-3 py-1">
-              💡 Stand in Sanctuary Base to regenerate HP · WASD/Arrows to Move · Companion Auto-Fires
+              💡 Stand in Sanctuary Base to regenerate HP · WASD to Move · [SHIFT / R-CLICK] to Dash · [SPACE] for Special
             </div>
 
-            {/* Desktop Ability Button */}
-            <button
-              onClick={() => engineRef.current?.triggerAbility()}
-              disabled={abilityCooldown > 0}
-              className={`glass-panel p-4 flex items-center gap-3 pointer-events-auto transition-all ${
-                abilityCooldown <= 0
-                  ? "hover:scale-105 active:scale-95 border-cyan-400 text-white cursor-pointer shadow-lg"
-                  : "opacity-50 cursor-not-allowed text-slate-500"
-              }`}
-            >
-              <Zap className="w-5 h-5 text-cyan-400" />
-              <div className="text-left font-mono">
-                <div className="text-xs font-bold text-white">{currentCompData.abilityName}</div>
-                <div className="text-[10px] text-slate-400">
-                  {abilityCooldown > 0 ? `${abilityCooldown.toFixed(1)}s` : "[SPACEBAR] READY"}
+            <div className="flex items-center gap-3">
+              {/* Desktop Dash Button */}
+              <button
+                onClick={() => engineRef.current?.triggerDash()}
+                disabled={dashCooldown > 0}
+                className={`glass-panel p-4 flex items-center gap-3 pointer-events-auto transition-all ${
+                  dashCooldown <= 0
+                    ? "hover:scale-105 active:scale-95 border-indigo-400 text-white cursor-pointer shadow-lg"
+                    : "opacity-50 cursor-not-allowed text-slate-500"
+                }`}
+              >
+                <Sparkles className="w-5 h-5 text-indigo-400" />
+                <div className="text-left font-mono">
+                  <div className="text-xs font-bold text-white">Phase Dash</div>
+                  <div className="text-[10px] text-slate-400">
+                    {dashCooldown > 0 ? `${dashCooldown.toFixed(1)}s` : "[SHIFT] READY"}
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
+
+              {/* Desktop Ability Button */}
+              <button
+                onClick={() => engineRef.current?.triggerAbility()}
+                disabled={abilityCooldown > 0}
+                className={`glass-panel p-4 flex items-center gap-3 pointer-events-auto transition-all ${
+                  abilityCooldown <= 0
+                    ? "hover:scale-105 active:scale-95 border-cyan-400 text-white cursor-pointer shadow-lg"
+                    : "opacity-50 cursor-not-allowed text-slate-500"
+                }`}
+              >
+                <Zap className="w-5 h-5 text-cyan-400" />
+                <div className="text-left font-mono">
+                  <div className="text-xs font-bold text-white">{currentCompData.abilityName}</div>
+                  <div className="text-[10px] text-slate-400">
+                    {abilityCooldown > 0 ? `${abilityCooldown.toFixed(1)}s` : "[SPACEBAR] READY"}
+                  </div>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -567,24 +642,39 @@ export default function App() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-6 max-w-4xl w-full max-h-[75vh] overflow-y-auto p-1 mb-auto sm:mb-0">
-            {pendingUpgrades.map((card) => (
-              <div
-                key={card.id}
-                onClick={() => handleSelectUpgrade(card)}
-                className="glass-panel p-4 sm:p-6 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 hover:border-cyan-400 hover:shadow-2xl group"
-              >
-                <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">
-                  {card.icon}
+            {pendingUpgrades.map((card) => {
+              const isLegendary = card.rarity === "legendary";
+              return (
+                <div
+                  key={card.id}
+                  onClick={() => handleSelectUpgrade(card)}
+                  className={`glass-panel p-4 sm:p-6 flex flex-col items-center text-center cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 group ${
+                    isLegendary
+                      ? "border-amber-400 bg-amber-950/40 shadow-[0_0_35px_rgba(245,158,11,0.4)] animate-pulse hover:border-amber-300"
+                      : "hover:border-cyan-400 hover:shadow-2xl"
+                  }`}
+                >
+                  <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">
+                    {card.icon}
+                  </div>
+                  <h4 className={`text-lg font-bold mb-2 ${isLegendary ? "text-amber-300" : "text-white"}`}>
+                    {card.title}
+                  </h4>
+                  <p className="text-xs font-mono text-slate-300 leading-relaxed mb-4">
+                    {card.description}
+                  </p>
+                  <span
+                    className={`mt-auto px-3 py-1 rounded-full text-[10px] font-mono uppercase font-black ${
+                      isLegendary
+                        ? "bg-amber-400 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.6)]"
+                        : "bg-white/10 text-cyan-300"
+                    }`}
+                  >
+                    {card.rarity} {card.category}
+                  </span>
                 </div>
-                <h4 className="text-lg font-bold text-white mb-2">{card.title}</h4>
-                <p className="text-xs font-mono text-slate-300 leading-relaxed mb-4">
-                  {card.description}
-                </p>
-                <span className="mt-auto px-3 py-1 rounded-full text-[10px] font-mono uppercase font-bold bg-white/10 text-cyan-300">
-                  {card.rarity} {card.category}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

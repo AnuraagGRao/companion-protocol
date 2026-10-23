@@ -1,4 +1,32 @@
 import type { UpgradeCard, PlayerState, SanctuaryBase } from "./types";
+import { sounds } from "./sound";
+
+export const EVOLUTION_CARDS: Record<string, UpgradeCard> = {
+  koji: {
+    id: "evolution_koji",
+    title: "Hyper-Lattice Ion Beam",
+    description: "LEGENDARY EVOLUTION: Bamboo Railgun pierces 8 enemies and arcs chain lightning to 3 nearby targets.",
+    icon: "⚡",
+    category: "evolution",
+    rarity: "legendary",
+  },
+  mochi: {
+    id: "evolution_mochi",
+    title: "Citrus Supernova",
+    description: "LEGENDARY EVOLUTION: Yuzu Bomb explodes on contact into 6 cluster bomblets that carpet-bomb the horde.",
+    icon: "🍊",
+    category: "evolution",
+    rarity: "legendary",
+  },
+  kai: {
+    id: "evolution_kai",
+    title: "Eclipse Vortex",
+    description: "LEGENDARY EVOLUTION: Homing Blades spawn 4 permanent orbiting plasma shurikens that shred nearby enemies.",
+    icon: "🌀",
+    category: "evolution",
+    rarity: "legendary",
+  },
+};
 
 export const UPGRADE_POOL: UpgradeCard[] = [
   {
@@ -28,7 +56,7 @@ export const UPGRADE_POOL: UpgradeCard[] = [
   {
     id: "max_health",
     title: "Reinforced Alloy Hull",
-    description: "Max Health increased by +40 and immediately heals 40 HP.",
+    description: "Max Health increased by +45 and immediately heals 45 HP.",
     icon: "🛡️",
     category: "stat",
     rarity: "common",
@@ -40,6 +68,22 @@ export const UPGRADE_POOL: UpgradeCard[] = [
     icon: "🧲",
     category: "stat",
     rarity: "common",
+  },
+  {
+    id: "crit_chance",
+    title: "Overcharged Capacitors",
+    description: "+18% Critical Strike Chance & +50% Critical Damage.",
+    icon: "✨",
+    category: "weapon",
+    rarity: "rare",
+  },
+  {
+    id: "dash_cooldown",
+    title: "Phase Sub-Thrusters",
+    description: "Phase Dash cooldown reduced by -35% with extended invulnerability.",
+    icon: "💨",
+    category: "stat",
+    rarity: "rare",
   },
   {
     id: "base_repair",
@@ -75,13 +119,38 @@ export const UPGRADE_POOL: UpgradeCard[] = [
   },
 ];
 
-export function getRandomUpgrades(count: number = 3): UpgradeCard[] {
+export function getRandomUpgrades(player: PlayerState, count: number = 3): UpgradeCard[] {
+  const options: UpgradeCard[] = [];
+
+  // If player is level 5 or higher and hasn't evolved their weapon yet, guarantee evolution card
+  if (player.level >= 5 && !player.isEvolved) {
+    const evoCard = EVOLUTION_CARDS[player.companion.id];
+    if (evoCard) {
+      options.push(evoCard);
+    }
+  }
+
   const shuffled = [...UPGRADE_POOL].sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, count);
+  for (const card of shuffled) {
+    if (options.length >= count) break;
+    if (!options.some((o) => o.id === card.id)) {
+      options.push(card);
+    }
+  }
+
+  return options;
 }
 
 export function applyUpgrade(upgrade: UpgradeCard, player: PlayerState, base: SanctuaryBase) {
   switch (upgrade.id) {
+    case "evolution_koji":
+    case "evolution_mochi":
+    case "evolution_kai":
+      player.isEvolved = true;
+      player.evolutionTitle = upgrade.title;
+      player.damageMultiplier += 0.4;
+      sounds.playEvolution();
+      break;
     case "fire_rate":
       player.fireRateMultiplier += 0.25;
       break;
@@ -92,18 +161,25 @@ export function applyUpgrade(upgrade: UpgradeCard, player: PlayerState, base: Sa
       player.speed *= 1.18;
       break;
     case "max_health":
-      player.maxHealth += 40;
-      player.health = Math.min(player.maxHealth, player.health + 40);
+      player.maxHealth += 45;
+      player.health = Math.min(player.maxHealth, player.health + 45);
       break;
     case "pickup_range":
       player.pickupRange *= 1.5;
+      break;
+    case "crit_chance":
+      player.critChance = Math.min(0.85, player.critChance + 0.18);
+      player.critMultiplier += 0.5;
+      break;
+    case "dash_cooldown":
+      player.dashMaxCooldown = Math.max(0.8, player.dashMaxCooldown * 0.65);
       break;
     case "base_repair":
       base.health = Math.min(base.maxHealth, base.health + 350);
       base.level++;
       break;
     case "pierce":
-      player.projectileSpeedMultiplier += 0.2;
+      player.pierceBonus += 2;
       break;
     case "ability_cdr":
       player.companion.abilityCooldown *= 0.75;

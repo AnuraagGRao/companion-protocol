@@ -58,6 +58,21 @@ export interface PlayerState {
   fireRateMultiplier: number;
   projectileSpeedMultiplier: number;
   pickupRange: number;
+  pierceBonus: number;
+  critChance: number;
+  critMultiplier: number;
+  // Dash mechanics
+  dashTimer: number;
+  dashCooldownTimer: number;
+  dashMaxCooldown: number;
+  isDashing: boolean;
+  // Weapon Evolution
+  isEvolved: boolean;
+  evolutionTitle?: string;
+  // Kill streak & adrenaline
+  killStreak: number;
+  streakTimer: number;
+  streakMultiplier: number;
 }
 
 export interface SanctuaryBase {
@@ -83,8 +98,13 @@ export interface Projectile {
   duration: number;
   color: string;
   isEnemy: boolean;
-  type: "beam" | "bomb" | "blade" | "bullet" | "laser" | "flame";
+  type: "beam" | "bomb" | "blade" | "bullet" | "laser" | "flame" | "lightning" | "cluster";
   rotation?: number;
+  isCrit?: boolean;
+  isCluster?: boolean;
+  isOrbiting?: boolean;
+  orbitAngle?: number;
+  orbitDistance?: number;
 }
 
 export type EnemyType = "glitch" | "crawler" | "brute" | "phantom" | "boss";
@@ -105,6 +125,8 @@ export interface Enemy {
   xpValue: number;
   targetMode: "player" | "base";
   shootCooldown?: number;
+  hitFlashTimer?: number;
+  isElite?: boolean;
 }
 
 export interface Particle {
@@ -164,6 +186,6 @@ export interface UpgradeCard {
   title: string;
   description: string;
   icon: string;
-  category: "weapon" | "stat" | "base" | "ability";
-  rarity: "common" | "rare" | "epic";
+  category: "weapon" | "stat" | "base" | "ability" | "evolution";
+  rarity: "common" | "rare" | "epic" | "legendary";
 }

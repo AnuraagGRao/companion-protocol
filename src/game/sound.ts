@@ -207,6 +207,105 @@ export class SoundEngine {
     osc.stop(now + 0.12);
   }
 
+  // Phase Dash whoosh
+  playDash() {
+    if (this.isMuted || this.volume <= 0) return;
+    this.initCtx();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const filter = this.ctx.createBiquadFilter();
+    const gain = this.ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(650, now);
+    osc.frequency.exponentialRampToValueAtTime(180, now + 0.22);
+
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(1400, now);
+
+    gain.gain.setValueAtTime(0.2 * this.volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.24);
+  }
+
+  // Critical Strike punchy chime
+  playCrit() {
+    if (this.isMuted || this.volume <= 0) return;
+    this.initCtx();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    [1046.5, 1318.5].forEach((freq) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0.18 * this.volume, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+      osc.start(now);
+      osc.stop(now + 0.19);
+    });
+  }
+
+  // Weapon Evolution Legendary Stinger
+  playEvolution() {
+    if (this.isMuted || this.volume <= 0) return;
+    this.initCtx();
+    if (!this.ctx) return;
+
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98];
+    notes.forEach((freq, idx) => {
+      const now = this.ctx!.currentTime + idx * 0.07;
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0.16 * this.volume, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+      osc.start(now);
+      osc.stop(now + 0.48);
+    });
+  }
+
+  // Chain Lightning crackle
+  playLightning() {
+    if (this.isMuted || this.volume <= 0) return;
+    this.initCtx();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const filter = this.ctx.createBiquadFilter();
+    const gain = this.ctx.createGain();
+
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(1200 + Math.random() * 400, now);
+    osc.frequency.exponentialRampToValueAtTime(300, now + 0.12);
+
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(1500, now);
+
+    gain.gain.setValueAtTime(0.14 * this.volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.15);
+  }
+
   // Ambient procedural synth drone (plays if no custom BGM MP3 is found)
   startAmbientDrone() {
     if (this.isMuted || this.volume <= 0 || this.ambientOsc) return;

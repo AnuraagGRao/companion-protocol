@@ -87,6 +87,18 @@ export class GameEngine {
       fireRateMultiplier: 1.0,
       projectileSpeedMultiplier: 1.0,
       pickupRange: op.id === "rowan" ? 150 : 110,
+      pierceBonus: 0,
+      critChance: op.id === "ren" ? 0.35 : 0.15,
+      critMultiplier: 2.0,
+      dashTimer: 0,
+      dashCooldownTimer: 0,
+      dashMaxCooldown: 2.2,
+      isDashing: false,
+      isEvolved: false,
+      evolutionTitle: undefined,
+      killStreak: 0,
+      streakTimer: 0,
+      streakMultiplier: 1.0,
     };
 
     this.bindInputs();
@@ -105,6 +117,15 @@ export class GameEngine {
         e.preventDefault();
         this.triggerAbility();
       }
+      if (e.key === "Shift" || e.key === "ShiftLeft" || e.key === "ShiftRight") {
+        e.preventDefault();
+        this.triggerDash();
+      }
+    });
+
+    this.canvas.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      this.triggerDash();
     });
 
     window.addEventListener("keyup", (e) => {
@@ -232,6 +253,47 @@ export class GameEngine {
     }
   }
 
+  triggerDash() {
+    if (this.player.dashCooldownTimer > 0) return;
+    this.player.dashCooldownTimer = this.player.dashMaxCooldown;
+    this.player.isDashing = true;
+    this.player.dashTimer = 0.25;
+    this.player.isInvulnerable = true;
+    this.player.invulnerableTimer = Math.max(this.player.invulnerableTimer, 0.35);
+
+    let dashAngle = this.player.facingAngle;
+    if (this.joystickVector.x !== 0 || this.joystickVector.y !== 0) {
+      dashAngle = Math.atan2(this.joystickVector.y, this.joystickVector.x);
+    } else if (this.keys["w"] || this.keys["s"] || this.keys["a"] || this.keys["d"]) {
+      const mx = (this.keys["d"] ? 1 : 0) - (this.keys["a"] ? 1 : 0);
+      const my = (this.keys["s"] ? 1 : 0) - (this.keys["w"] ? 1 : 0);
+      if (mx !== 0 || my !== 0) {
+        dashAngle = Math.atan2(my, mx);
+      }
+    }
+
+    this.player.vx = Math.cos(dashAngle) * 22;
+    this.player.vy = Math.sin(dashAngle) * 22;
+
+    sounds.playDash();
+    this.screenShake = Math.max(this.screenShake, 5);
+
+    // Spawn holographic afterimage particles
+    for (let i = 0; i < 14; i++) {
+      this.particles.push({
+        x: this.player.x - Math.cos(dashAngle) * (i * 8),
+        y: this.player.y - Math.sin(dashAngle) * (i * 8),
+        vx: (Math.random() - 0.5) * 3,
+        vy: (Math.random() - 0.5) * 3,
+        radius: Math.random() * 4 + 2,
+        color: this.player.operator.accentHex,
+        life: 0.45,
+        maxLife: 0.45,
+        alpha: 0.85,
+      });
+    }
+  }
+
   private loop(timestamp: number) {
     if (!this.isRunning || this.isPaused) return;
 
@@ -299,10 +361,70 @@ export class GameEngine {
       this.player.abilityCooldownTimer = Math.max(0, this.player.abilityCooldownTimer - delta);
     }
 
+    // Dash cooldown & active state timers
+    if (this.player.dashCooldownTimer > 0) {
+      this.player.dashCooldownTimer = Math.max(0, this.player.dashCooldownTimer - delta);
+    }
+    if (this.player.dashTimer > 0) {
+      this.player.dashTimer -= delta;
+      // Spawn afterimages while dashing
+      if (Math.random() < 0.6) {
+        this.particles.push({
+          x: this.player.x,
+          y: this.player.y,
+          vx: (Math.random() - 0.5) * 1.5,
+          vy: (Math.random() - 0.5) * 1.5,
+          radius: this.player.radius * 0.9,
+          color: this.player.operator.accentHex,
+          life: 0.3,
+          maxLife: 0.3,
+          alpha: 0.5,
+        });
+      }
+      if (this.player.dashTimer <= 0) {
+        this.player.isDashing = false;
+      }
+    }
+
+    // Kill streak adrenaline decay
+    if (this.player.streakTimer > 0) {
+      this.player.streakTimer -= delta;
+      if (this.player.streakTimer <= 0) {
+        this.player.killStreak = 0;
+        this.player.streakMultiplier = 1.0;
+      }
+    }
+
     // Sanctuary Base Healing Field
     if (this.map.isInsideBase(this.player.x, this.player.y)) {
       if (this.player.health < this.player.maxHealth) {
         this.player.health = Math.min(this.player.maxHealth, this.player.health + 12 * delta);
+      }
+    }
+
+    // Kai Evolution: Maintain permanent Orbiting Shuriken Barrier
+    if (this.player.isEvolved && this.player.companion.id === "kai") {
+      const activeOrbiters = this.projectiles.filter((p) => p.isOrbiting);
+      if (activeOrbiters.length < 4) {
+        for (let k = activeOrbiters.length; k < 4; k++) {
+          this.projectiles.push({
+            id: Math.random().toString(),
+            x: this.player.x,
+            y: this.player.y,
+            vx: 0,
+            vy: 0,
+            radius: 8,
+            damage: 32 * this.player.damageMultiplier,
+            pierce: 9999,
+            duration: 9999,
+            color: "#c084fc",
+            isEnemy: false,
+            type: "blade",
+            isOrbiting: true,
+            orbitAngle: (k * Math.PI) / 2,
+            orbitDistance: 95,
+          });
+        }
       }
     }
 
@@ -327,6 +449,11 @@ export class GameEngine {
     // Update enemies
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
+
+      // Update hit flash timer
+      if (e.hitFlashTimer && e.hitFlashTimer > 0) {
+        e.hitFlashTimer -= delta;
+      }
 
       // Target selection: Player or Sanctuary Base
       let targetX = this.player.x;
@@ -379,15 +506,33 @@ export class GameEngine {
 
       // Enemy Death
       if (e.health <= 0) {
-        this.score += e.xpValue * 10;
+        // Increment Kill Streak & Multiplier
+        this.player.killStreak++;
+        this.player.streakTimer = 3.2;
+        if (this.player.killStreak >= 50) this.player.streakMultiplier = 3.0;
+        else if (this.player.killStreak >= 25) this.player.streakMultiplier = 2.0;
+        else if (this.player.killStreak >= 10) this.player.streakMultiplier = 1.5;
+        else this.player.streakMultiplier = 1.0;
+
+        const xpGain = Math.round(e.xpValue * this.player.streakMultiplier);
+        this.score += xpGain * 10;
+
         this.xpOrbs.push({
           id: Math.random().toString(),
           x: e.x,
           y: e.y,
-          value: e.xpValue,
-          color: e.color,
+          value: xpGain,
+          color: e.isElite ? "#fbbf24" : e.color,
         });
-        sounds.playExplosion(false);
+
+        if (e.isElite) {
+          sounds.playExplosion(true);
+          this.screenShake = 12;
+          this.addParticleRing(e.x, e.y, "#fbbf24", 28);
+        } else {
+          sounds.playExplosion(false);
+        }
+
         this.addDeathParticles(e.x, e.y, e.color);
         this.enemies.splice(i, 1);
       }
@@ -396,6 +541,26 @@ export class GameEngine {
     // 4. Projectiles
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
+
+      // Handle Orbiting Barrier Projectiles (Kai Evolution)
+      if (p.isOrbiting) {
+        p.orbitAngle = (p.orbitAngle || 0) + delta * 3.8;
+        const orbitDist = p.orbitDistance || 95;
+        p.x = this.player.x + Math.cos(p.orbitAngle) * orbitDist;
+        p.y = this.player.y + Math.sin(p.orbitAngle) * orbitDist;
+
+        // Check contact with nearby enemies
+        for (const e of this.enemies) {
+          const d = Math.hypot(p.x - e.x, p.y - e.y);
+          if (d < p.radius + e.radius) {
+            e.health -= p.damage * delta * 4;
+            e.hitFlashTimer = 0.06;
+            this.addDeathParticles(p.x, p.y, p.color, 1);
+          }
+        }
+        continue;
+      }
+
       p.x += p.vx;
       p.y += p.vy;
       p.duration -= delta;
@@ -407,21 +572,85 @@ export class GameEngine {
           const dist = Math.hypot(p.x - e.x, p.y - e.y);
           if (dist < p.radius + e.radius) {
             e.health -= p.damage;
+            e.hitFlashTimer = 0.08;
             p.pierce--;
-            this.addDamageNumber(e.x, e.y, Math.round(p.damage), p.color);
+
+            // Critical hit impact feedback
+            if (p.isCrit) {
+              sounds.playCrit();
+              this.screenShake = Math.max(this.screenShake, 7);
+              this.addDamageNumber(e.x, e.y, "CRIT! " + Math.round(p.damage), "#fbbf24", true);
+            } else {
+              this.addDamageNumber(e.x, e.y, Math.round(p.damage), p.color);
+            }
+
             this.addDeathParticles(p.x, p.y, p.color, 4);
 
+            // Koji Evolution: Chain Lightning Arc to nearby enemies
+            if (this.player.isEvolved && this.player.companion.id === "koji" && p.type === "beam") {
+              sounds.playLightning();
+              let zapped = 0;
+              for (const target of this.enemies) {
+                if (target === e) continue;
+                const chainDist = Math.hypot(target.x - e.x, target.y - e.y);
+                if (chainDist < 190 && zapped < 3) {
+                  target.health -= p.damage * 0.45;
+                  target.hitFlashTimer = 0.08;
+                  this.addDamageNumber(target.x, target.y, Math.round(p.damage * 0.45), "#38bdf8");
+                  // Electric arc particles
+                  for (let pt = 0; pt < 5; pt++) {
+                    const ratio = pt / 5;
+                    this.particles.push({
+                      x: e.x + (target.x - e.x) * ratio + (Math.random() - 0.5) * 10,
+                      y: e.y + (target.y - e.y) * ratio + (Math.random() - 0.5) * 10,
+                      vx: 0,
+                      vy: 0,
+                      radius: 2.5,
+                      color: "#38bdf8",
+                      life: 0.15,
+                      maxLife: 0.15,
+                      alpha: 1,
+                    });
+                  }
+                  zapped++;
+                }
+              }
+            }
+
+            // Mochi Bomb Splash & Supernova Cluster Bomblets
             if (p.type === "bomb") {
-              // Yuzu splash damage
               sounds.playExplosion(true);
               this.screenShake = 6;
               this.enemies.forEach((other) => {
                 const splashDist = Math.hypot(other.x - p.x, other.y - p.y);
-                if (splashDist < 120) {
+                if (splashDist < 130) {
                   other.health -= p.damage * 0.7;
+                  other.hitFlashTimer = 0.08;
                   this.addDamageNumber(other.x, other.y, Math.round(p.damage * 0.7), "#f59e0b");
                 }
               });
+
+              // Mochi Evolution: Spawn 6 Cluster Bomblets
+              if (this.player.isEvolved) {
+                for (let k = 0; k < 6; k++) {
+                  const ang = (k * Math.PI * 2) / 6;
+                  this.projectiles.push({
+                    id: Math.random().toString(),
+                    x: p.x,
+                    y: p.y,
+                    vx: Math.cos(ang) * 9,
+                    vy: Math.sin(ang) * 9,
+                    radius: 7,
+                    damage: p.damage * 0.55,
+                    pierce: 1,
+                    duration: 0.75,
+                    color: "#f59e0b",
+                    isEnemy: false,
+                    type: "cluster",
+                  });
+                }
+              }
+
               p.pierce = 0;
             }
 
@@ -518,57 +747,69 @@ export class GameEngine {
     const id = this.player.companion.id;
     sounds.playLaser(id === "kai" ? 750 : id === "mochi" ? 380 : 580);
 
+    const isCrit = Math.random() < this.player.critChance;
+    const critFactor = isCrit ? this.player.critMultiplier : 1.0;
+    const isEvolved = this.player.isEvolved;
+
     if (id === "koji") {
-      // Piercing Railgun fired by Guardian Koji
+      // Piercing Railgun / Hyper-Lattice Ion Beam
+      const baseDamage = isEvolved ? 68 : 42;
+      const basePierce = isEvolved ? 8 : 4;
       this.projectiles.push({
         id: Math.random().toString(),
         x: shotOriginX,
         y: shotOriginY,
-        vx: Math.cos(angle) * 16 * this.player.projectileSpeedMultiplier,
-        vy: Math.sin(angle) * 16 * this.player.projectileSpeedMultiplier,
-        radius: 6,
-        damage: 42 * this.player.damageMultiplier,
-        pierce: 4,
-        duration: 1.2,
-        color: "#06b6d4",
+        vx: Math.cos(angle) * (isEvolved ? 20 : 16) * this.player.projectileSpeedMultiplier,
+        vy: Math.sin(angle) * (isEvolved ? 20 : 16) * this.player.projectileSpeedMultiplier,
+        radius: isEvolved ? 9 : 6,
+        damage: baseDamage * this.player.damageMultiplier * critFactor,
+        pierce: basePierce + this.player.pierceBonus,
+        duration: 1.3,
+        color: isCrit ? "#fbbf24" : isEvolved ? "#38bdf8" : "#06b6d4",
         isEnemy: false,
         type: "beam",
+        isCrit,
       });
 
     } else if (id === "mochi") {
-      // Bouncing Yuzu Bomb fired by Guardian Mochi
+      // Bouncing Yuzu Bomb / Citrus Supernova
+      const baseDamage = isEvolved ? 85 : 55;
       this.projectiles.push({
         id: Math.random().toString(),
         x: shotOriginX,
         y: shotOriginY,
-        vx: Math.cos(angle) * 10 * this.player.projectileSpeedMultiplier,
-        vy: Math.sin(angle) * 10 * this.player.projectileSpeedMultiplier,
-        radius: 12,
-        damage: 55 * this.player.damageMultiplier,
+        vx: Math.cos(angle) * 11 * this.player.projectileSpeedMultiplier,
+        vy: Math.sin(angle) * 11 * this.player.projectileSpeedMultiplier,
+        radius: isEvolved ? 16 : 12,
+        damage: baseDamage * this.player.damageMultiplier * critFactor,
         pierce: 1,
         duration: 1.4,
-        color: "#f59e0b",
+        color: isCrit ? "#fbbf24" : "#f59e0b",
         isEnemy: false,
         type: "bomb",
+        isCrit,
       });
 
     } else {
-      // Kai Triple Homing Blades fired by Guardian Kai
-      [-0.25, 0, 0.25].forEach((offset) => {
+      // Kai Homing Blades / Eclipse Vortex
+      const angles = isEvolved ? [-0.4, -0.2, 0, 0.2, 0.4] : [-0.25, 0, 0.25];
+      const baseDamage = isEvolved ? 38 : 28;
+      angles.forEach((offset) => {
         const bladeAngle = angle + offset;
         this.projectiles.push({
           id: Math.random().toString(),
           x: shotOriginX,
           y: shotOriginY,
-          vx: Math.cos(bladeAngle) * 14 * this.player.projectileSpeedMultiplier,
-          vy: Math.sin(bladeAngle) * 14 * this.player.projectileSpeedMultiplier,
-          radius: 5,
-          damage: 28 * this.player.damageMultiplier,
-          pierce: 1,
-          duration: 1.3,
-          color: "#a855f7",
+          vx: Math.cos(bladeAngle) * 15 * this.player.projectileSpeedMultiplier,
+          vy: Math.sin(bladeAngle) * 15 * this.player.projectileSpeedMultiplier,
+          radius: isEvolved ? 6.5 : 5,
+          damage: baseDamage * this.player.damageMultiplier * critFactor,
+          pierce: 1 + this.player.pierceBonus,
+          duration: 1.35,
+          color: isCrit ? "#fbbf24" : isEvolved ? "#c084fc" : "#a855f7",
           isEnemy: false,
           type: "blade",
+          isCrit,
         });
       });
     }
@@ -581,7 +822,7 @@ export class GameEngine {
     sounds.playLevelUp();
     this.pause();
 
-    const upgradeChoices = getRandomUpgrades(3);
+    const upgradeChoices = getRandomUpgrades(this.player, 3);
     if (this.onLevelUp) {
       this.onLevelUp(upgradeChoices);
     }
@@ -596,7 +837,7 @@ export class GameEngine {
     }
   }
 
-  private addDamageNumber(x: number, y: number, value: number, color: string, isCrit: boolean = false) {
+  private addDamageNumber(x: number, y: number, value: number | string, color: string, isCrit: boolean = false) {
     this.damageNumbers.push({
       id: Math.random().toString(),
       x: x + (Math.random() - 0.5) * 20,
