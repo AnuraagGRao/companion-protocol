@@ -4,7 +4,7 @@ export class EnemySpawner {
   wave: number = 1;
   waveTimer: number = 0;
   spawnTimer: number = 0;
-  spawnInterval: number = 1.6; // Seconds between spawns
+  spawnInterval: number = 2.2; // Seconds between spawns at Wave 1
 
   update(delta: number, player: PlayerState, _base: SanctuaryBase, _enemies?: Enemy[]): Enemy[] {
     this.waveTimer += delta;
@@ -16,17 +16,18 @@ export class EnemySpawner {
     if (this.waveTimer > 45) {
       this.wave++;
       this.waveTimer = 0;
-      this.spawnInterval = Math.max(0.4, 1.6 - this.wave * 0.12);
+      this.spawnInterval = Math.max(0.6, 2.2 - this.wave * 0.15);
       // Guaranteed Elite spawn on wave advance
       spawned.push(this.createEnemy(player, true));
     }
 
-    // Spawn regular swarm
+    // Spawn regular swarm with progressive density
     if (this.spawnTimer >= this.spawnInterval) {
       this.spawnTimer = 0;
-      const count = Math.min(3 + this.wave, 12);
+      // Wave 1: 2 enemies. Wave 2: 3 enemies. Wave 3: 4 enemies...
+      const count = Math.min(2 + Math.floor((this.wave - 1) * 0.8), 12);
       for (let i = 0; i < count; i++) {
-        const isEliteRoll = Math.random() < 0.07;
+        const isEliteRoll = Math.random() < Math.min(0.04 + this.wave * 0.015, 0.15);
         spawned.push(this.createEnemy(player, isEliteRoll));
       }
     }
@@ -56,6 +57,9 @@ export class EnemySpawner {
     // 40% of enemies target the Sanctuary base, 60% hunt the player
     const targetMode: "player" | "base" = Math.random() < 0.4 ? "base" : "player";
 
+    // Progressive wave speed multiplier: calm early waves, ramping naturally into late waves
+    const waveSpeedFactor = 1 + (this.wave - 1) * 0.08;
+
     let baseEnemy: Enemy;
 
     switch (type) {
@@ -70,10 +74,10 @@ export class EnemySpawner {
           radius: 16,
           health: 45 + this.wave * 12,
           maxHealth: 45 + this.wave * 12,
-          speed: 2.8 + Math.random() * 0.5,
+          speed: (1.8 + Math.random() * 0.3) * waveSpeedFactor,
           damage: 14,
           color: "#f43f5e",
-          xpValue: 15,
+          xpValue: 18,
           targetMode,
           hitFlashTimer: 0,
         };
@@ -90,7 +94,7 @@ export class EnemySpawner {
           radius: 26,
           health: 140 + this.wave * 35,
           maxHealth: 140 + this.wave * 35,
-          speed: 1.5,
+          speed: (1.1 + Math.random() * 0.2) * waveSpeedFactor,
           damage: 28,
           color: "#ea580c",
           xpValue: 45,
@@ -111,17 +115,17 @@ export class EnemySpawner {
           radius: 18,
           health: 70 + this.wave * 18,
           maxHealth: 70 + this.wave * 18,
-          speed: 4.2,
+          speed: (2.3 + Math.random() * 0.3) * waveSpeedFactor,
           damage: 20,
           color: "#c084fc",
-          xpValue: 30,
+          xpValue: 35,
           targetMode: "player",
           hitFlashTimer: 0,
         };
         break;
 
       default:
-        // Glitch Mite
+        // Glitch Mite (Early game swarm)
         baseEnemy = {
           id: Math.random().toString(36).substring(2, 9),
           type: "glitch",
@@ -132,7 +136,7 @@ export class EnemySpawner {
           radius: 11,
           health: 20 + this.wave * 6,
           maxHealth: 20 + this.wave * 6,
-          speed: 3.6 + Math.random() * 0.8,
+          speed: (1.5 + Math.random() * 0.3) * waveSpeedFactor,
           damage: 8,
           color: "#ef4444",
           xpValue: 8,

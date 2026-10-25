@@ -325,13 +325,13 @@ export class GameEngine {
 
     const moveMag = Math.hypot(moveX, moveY);
     if (moveMag > 0) {
-      const speed = this.player.speed * (this.keys["shift"] ? 1.3 : 1.0);
-      this.player.vx += (moveX / moveMag) * speed * 0.45;
-      this.player.vy += (moveY / moveMag) * speed * 0.45;
+      const speed = this.player.speed * (this.keys["shift"] ? 1.25 : 1.0);
+      this.player.vx += (moveX / moveMag) * speed * 0.22;
+      this.player.vy += (moveY / moveMag) * speed * 0.22;
     }
 
-    this.player.vx *= 0.86;
-    this.player.vy *= 0.86;
+    this.player.vx *= 0.84;
+    this.player.vy *= 0.84;
     this.player.x += this.player.vx;
     this.player.y += this.player.vy;
 
@@ -468,10 +468,10 @@ export class GameEngine {
       const dy = targetY - e.y;
       const dist = Math.hypot(dx, dy) || 1;
 
-      e.vx += (dx / dist) * e.speed * 0.25;
-      e.vy += (dy / dist) * e.speed * 0.25;
-      e.vx *= 0.9;
-      e.vy *= 0.9;
+      e.vx += (dx / dist) * e.speed * 0.16;
+      e.vy += (dy / dist) * e.speed * 0.16;
+      e.vx *= 0.88;
+      e.vy *= 0.88;
       e.x += e.vx;
       e.y += e.vy;
 
@@ -517,12 +517,20 @@ export class GameEngine {
         const xpGain = Math.round(e.xpValue * this.player.streakMultiplier);
         this.score += xpGain * 10;
 
+        // Radiant cyber crystal colors (High contrast vs red/rose/orange hostile enemies)
+        let gemColor = "#00f5ff"; // Radiant Cyan for common (Glitch Mites)
+        if (e.isElite || xpGain >= 40) {
+          gemColor = "#fbbf24"; // Prismatic Gold for Elite / Boss
+        } else if (xpGain >= 15 || e.type === "brute" || e.type === "crawler") {
+          gemColor = "#10b981"; // Radiant Emerald for Crawlers & Brutes
+        }
+
         this.xpOrbs.push({
           id: Math.random().toString(),
           x: e.x,
           y: e.y,
           value: xpGain,
-          color: e.isElite ? "#fbbf24" : e.color,
+          color: gemColor,
         });
 
         if (e.isElite) {
@@ -902,15 +910,47 @@ export class GameEngine {
     // 1. Procedural Map & Base
     this.map.draw(ctx, this.cameraX, this.cameraY, w, h, this.gameTime);
 
-    // 2. XP Orbs
+    // 2. XP Data Crystals (Faceted Diamond Rhombus Gems)
     this.xpOrbs.forEach((orb) => {
-      ctx.beginPath();
-      ctx.arc(orb.x, orb.y, 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = orb.color;
+      ctx.save();
+      ctx.translate(orb.x, orb.y);
+
+      // Rotating faceted diamond shape
+      const rot = Math.sin(this.gameTime * 3 + orb.x * 0.05) * 0.25;
+      ctx.rotate(rot);
+
+      const size = orb.value >= 40 ? 7 : orb.value >= 15 ? 5.5 : 4.5;
+
+      // Outer gem glow
       ctx.shadowColor = orb.color;
-      ctx.shadowBlur = 8;
+      ctx.shadowBlur = 10;
+
+      // 4-Point Faceted Diamond Path
+      ctx.beginPath();
+      ctx.moveTo(0, -size * 1.35); // top vertex
+      ctx.lineTo(size, 0);          // right vertex
+      ctx.lineTo(0, size * 1.35);  // bottom vertex
+      ctx.lineTo(-size, 0);         // left vertex
+      ctx.closePath();
+      ctx.fillStyle = orb.color;
       ctx.fill();
-      ctx.shadowBlur = 0;
+
+      // Sharp crystal border
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Inner bright light facet
+      ctx.beginPath();
+      ctx.moveTo(0, -size * 0.7);
+      ctx.lineTo(size * 0.5, 0);
+      ctx.lineTo(0, size * 0.7);
+      ctx.lineTo(-size * 0.5, 0);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+      ctx.fill();
+
+      ctx.restore();
     });
 
     // 3. Projectiles
